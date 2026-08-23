@@ -46,6 +46,12 @@ testing before applying for Google Play production access.
     amber to red, and display a three-second **OVERHEATED** countdown.
   - [x] Add one-hit death feedback: a short flash, screen shake, and optional
     device vibration.
+  - [x] Strengthen draining feedback with a bright beam to each drained target,
+    cyan particles flowing inward, and a clearer pulsing radius ring.
+  - [x] Enlarge player and enemy visuals to 1.75× with per-component Inspector
+    controls, while keeping their original colours and gameplay hitboxes.
+  - [x] Make drainable energy objects larger with a slow pulse and white glow;
+    retain their existing foreground colour.
 
 - [ ] **Add a gentler opening.** Give the player a 3–5 second safe period, or
   start with only chaser enemies, before introducing the full enemy mix.

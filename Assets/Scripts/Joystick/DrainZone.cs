@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 [RequireComponent(typeof(Collider2D))]
 public class DrainZone : MonoBehaviour
@@ -15,6 +16,8 @@ public class DrainZone : MonoBehaviour
     private PlayerAmmo playerAmmo;   // ✅ ref to the player ammo
     private Collider2D col;
     private float ammoCarry;
+    private readonly HashSet<DrainableBase> drainablesBeingDrained = new HashSet<DrainableBase>();
+    private bool wasActive;
 
     private void Awake()
     {
@@ -38,10 +41,11 @@ public class DrainZone : MonoBehaviour
             !gameManager.IsOverheated &&
             !gameManager.IsGameOver;
 
-        col.enabled = active;
+        if (wasActive && !active)
+            StopDrainVisuals();
 
-        // Optional: stop draining visuals when disabled
-        // (not strictly necessary)
+        col.enabled = active;
+        wasActive = active;
     }
 
     private void OnTriggerStay2D(Collider2D other)
@@ -50,6 +54,8 @@ public class DrainZone : MonoBehaviour
 
         DrainableBase drainable = other.GetComponent<DrainableBase>();
         if (drainable == null) return;
+
+        drainablesBeingDrained.Add(drainable);
 
         float drained = drainable.TakeDrain(drainRate * Time.deltaTime);
 
@@ -80,6 +86,25 @@ public class DrainZone : MonoBehaviour
     {
         DrainableBase drainable = other.GetComponent<DrainableBase>();
         if (drainable != null)
+        {
             drainable.StopDraining();
+            drainablesBeingDrained.Remove(drainable);
+        }
+    }
+
+    private void OnDisable()
+    {
+        StopDrainVisuals();
+    }
+
+    private void StopDrainVisuals()
+    {
+        foreach (DrainableBase drainable in drainablesBeingDrained)
+        {
+            if (drainable != null)
+                drainable.StopDraining();
+        }
+
+        drainablesBeingDrained.Clear();
     }
 }

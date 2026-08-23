@@ -2558,6 +2558,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 1960222620070036546, guid: fabd5e8bec4ab47ba9cf5c2a17edf537, type: 3}
+      propertyPath: visualScaleMultiplier
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 2938172665668524332, guid: fabd5e8bec4ab47ba9cf5c2a17edf537, type: 3}
       propertyPath: m_Name
       value: EnemyChaser
@@ -3398,7 +3402,7 @@ MonoBehaviour:
     startInterval: 4
     minInterval: 0.8
     intervalDecreasePerMinute: 0.5
-    spawnChance: 1
+    spawnChance: 0
     maxAlive: 10
     currentInterval: 0
     timer: 0
@@ -21159,6 +21163,15 @@ MonoBehaviour:
   gameOverPanel: {fileID: 1416369297}
   gameOverScoreText: {fileID: 206929792}
   bestScoreText: {fileID: 206929792}
+  drainHeatText: {fileID: 0}
+  drainCoolColor: {r: 0.2, g: 1, b: 0.55, a: 1}
+  drainWarmColor: {r: 1, g: 0.72, b: 0.2, a: 1}
+  drainCriticalColor: {r: 1, g: 0.25, b: 0.35, a: 1}
+  deathFlashDuration: 0.16
+  deathFlashOpacity: 0.65
+  deathShakeDuration: 0.25
+  deathShakeStrength: 0.18
+  vibrateOnDeath: 1
   drainGauge: 0
   overheated: 0
   currentEnergy: 0
@@ -21546,6 +21559,7 @@ MonoBehaviour:
   joystick: {fileID: 1662049531}
   moveSpeed: 10
   reducedMoveSpeed: 6
+  visualScaleMultiplier: 1
   isDraining: 0
 --- !u!1 &1250032748394570735
 GameObject:
@@ -21596,9 +21610,13 @@ MonoBehaviour:
   gameManager: {fileID: 2120872779}
   ringSprite: {fileID: 8539202293677107305}
   drainParticles: {fileID: 7909196589420245858}
-  pulseSpeed: 6
-  minAlpha: 0.1
-  maxAlpha: 0.4
+  pulseSpeed: 8
+  minAlpha: 0.28
+  maxAlpha: 0.75
+  drainColor: {r: 0.15, g: 0.95, b: 1, a: 1}
+  ringPulseAmount: 0.07
+  particleTravelSpeed: 7
+  particleEmissionRate: 70
 --- !u!114 &3110148855933389369
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -283,7 +283,7 @@ public class GameManager : MonoBehaviour
 
         Debug.Log("Game Over");
 
-        spriteRenderer.enabled = false;
+        SetPlayerVisualVisible(false);
         trailRenderer.enabled = false;
         deathParticles.Play();
     }
@@ -409,7 +409,7 @@ public class GameManager : MonoBehaviour
         overheated = false;
         currentEnergy = 0f;
         currentScore = 0f;
-        spriteRenderer.enabled = true;
+        SetPlayerVisualVisible(true);
         trailRenderer.enabled = true;
         deathParticles.Stop();
 
@@ -425,7 +425,7 @@ public class GameManager : MonoBehaviour
     {
         isGameOver = false;
 
-        spriteRenderer.enabled = true;
+        SetPlayerVisualVisible(true);
         trailRenderer.enabled = true;
         deathParticles.Stop();
 
@@ -460,6 +460,18 @@ public class GameManager : MonoBehaviour
     public void ResumeGame()
     {
         Time.timeScale = 1f;
+    }
+
+    private void SetPlayerVisualVisible(bool visible)
+    {
+        if (player != null && player.VisualRenderer != null)
+        {
+            player.VisualRenderer.enabled = visible;
+            return;
+        }
+
+        if (spriteRenderer != null)
+            spriteRenderer.enabled = visible;
     }
     
 }

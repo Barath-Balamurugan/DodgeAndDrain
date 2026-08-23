@@ -7,7 +7,11 @@ public class PlayerMovement2D : MonoBehaviour
     public float moveSpeed = 5f;
     public float reducedMoveSpeed = 2f;
 
+    [Header("Visual Scale")]
+    [SerializeField, Min(0.1f)] private float visualScaleMultiplier = 1.75f;
+
     public bool isDraining;
+    public SpriteRenderer VisualRenderer { get; private set; }
 
     private Rigidbody2D rb;
 
@@ -18,6 +22,8 @@ public class PlayerMovement2D : MonoBehaviour
 
     private void Awake()
     {
+        CreateScaledPlayerVisual();
+
         rb = GetComponent<Rigidbody2D>();
         rb.gravityScale = 0f;
         rb.freezeRotation = true;
@@ -46,8 +52,8 @@ public class PlayerMovement2D : MonoBehaviour
 
     private void CachePlayerExtents()
     {
-        // Use SpriteRenderer if present
-        SpriteRenderer sr = GetComponent<SpriteRenderer>();
+        // Keep the enlarged visual inside the camera bounds.
+        SpriteRenderer sr = VisualRenderer != null ? VisualRenderer : GetComponent<SpriteRenderer>();
         if (sr != null)
         {
             halfWidth  = sr.bounds.extents.x;
@@ -87,6 +93,37 @@ public class PlayerMovement2D : MonoBehaviour
     public void SetDraining(bool draining)
     {
         isDraining = draining;
+    }
+
+    private void CreateScaledPlayerVisual()
+    {
+        SpriteRenderer originalRenderer = GetComponent<SpriteRenderer>();
+        if (originalRenderer == null)
+            return;
+
+        GameObject visualObject = new GameObject("PlayerVisual");
+        visualObject.transform.SetParent(transform, false);
+        visualObject.transform.localScale = Vector3.one * visualScaleMultiplier;
+
+        VisualRenderer = visualObject.AddComponent<SpriteRenderer>();
+        CopyRendererSettings(originalRenderer, VisualRenderer);
+
+        // The enlarged sprite is visual only, so the player collider and drain
+        // radius keep their existing gameplay sizes.
+        originalRenderer.enabled = false;
+    }
+
+    private static void CopyRendererSettings(SpriteRenderer source, SpriteRenderer target)
+    {
+        target.sprite = source.sprite;
+        target.color = source.color;
+        target.sharedMaterial = source.sharedMaterial;
+        target.sortingLayerID = source.sortingLayerID;
+        target.sortingOrder = source.sortingOrder;
+        target.flipX = source.flipX;
+        target.flipY = source.flipY;
+        target.drawMode = source.drawMode;
+        target.size = source.size;
     }
 
     // If screen can rotate / resize, call this when resolution changes

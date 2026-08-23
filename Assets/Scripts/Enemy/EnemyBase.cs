@@ -16,6 +16,12 @@ public class EnemyBase : MonoBehaviour
     private LineRenderer drainLine;
     private Transform drainTarget;
     public bool isBeingDrained;
+    [SerializeField] private float drainBeamWidth = 0.16f;
+    private float drainBeamBaseWidth;
+
+    [Header("Visual Scale")]
+    [SerializeField, Min(0.1f)] private float visualScaleMultiplier = 1.75f;
+    private bool visualScaleApplied;
 
     protected virtual void Awake()
     {
@@ -26,6 +32,7 @@ public class EnemyBase : MonoBehaviour
         {
             drainLine.enabled = false; // hide at start
             drainLine.positionCount = 2;
+            ConfigureDrainBeam();
         }
 
         originalScale = transform.localScale;
@@ -40,11 +47,80 @@ public class EnemyBase : MonoBehaviour
             drainLine.enabled = true;
             drainLine.SetPosition(0, transform.position);       // enemy
             drainLine.SetPosition(1, drainTarget.position);     // player
+            drainLine.widthMultiplier = drainBeamBaseWidth * (1f + 0.16f * Mathf.Sin(Time.time * 14f));
         }
         else if (drainLine != null)
         {
             drainLine.enabled = false;
         }
+    }
+
+    private void LateUpdate()
+    {
+        if (!visualScaleApplied)
+            ApplyVisualScale();
+    }
+
+    private void ApplyVisualScale()
+    {
+        EnemyShapeVisual shapeVisual = GetComponent<EnemyShapeVisual>();
+        SpriteRenderer visualRenderer = shapeVisual != null ? shapeVisual.Renderer : GetComponent<SpriteRenderer>();
+        if (visualRenderer == null)
+            return;
+
+        if (visualRenderer.transform == transform)
+        {
+            GameObject visualObject = new GameObject("EnemyVisual");
+            visualObject.transform.SetParent(transform, false);
+            visualObject.transform.localScale = Vector3.one * visualScaleMultiplier;
+
+            SpriteRenderer enlargedRenderer = visualObject.AddComponent<SpriteRenderer>();
+            CopyRendererSettings(visualRenderer, enlargedRenderer);
+            visualRenderer.enabled = false;
+        }
+        else
+        {
+            visualRenderer.transform.localScale *= visualScaleMultiplier;
+        }
+
+        // Scaling the sprite child keeps movement, collision, and spawn logic unchanged.
+        visualScaleApplied = true;
+    }
+
+    private static void CopyRendererSettings(SpriteRenderer source, SpriteRenderer target)
+    {
+        target.sprite = source.sprite;
+        target.color = source.color;
+        target.sharedMaterial = source.sharedMaterial;
+        target.sortingLayerID = source.sortingLayerID;
+        target.sortingOrder = source.sortingOrder;
+        target.flipX = source.flipX;
+        target.flipY = source.flipY;
+        target.drawMode = source.drawMode;
+        target.size = source.size;
+    }
+
+    private void ConfigureDrainBeam()
+    {
+        drainBeamBaseWidth = drainBeamWidth;
+        drainLine.useWorldSpace = true;
+        drainLine.widthMultiplier = drainBeamBaseWidth;
+        drainLine.numCapVertices = 6;
+        drainLine.sortingOrder = Mathf.Max(drainLine.sortingOrder, 8);
+
+        Gradient gradient = new Gradient();
+        gradient.SetKeys(
+            new[]
+            {
+                new GradientColorKey(new Color(0.15f, 0.9f, 1f), 0f),
+                new GradientColorKey(new Color(0.85f, 1f, 1f), 1f)
+            },
+            new[]
+            {
+                new GradientAlphaKey(0.8f, 0f),
+                new GradientAlphaKey(1f, 1f)
+            });
+        drainLine.colorGradient = gradient;
     }
 
     // Called from DrainZone whenever this enemy is being drained
