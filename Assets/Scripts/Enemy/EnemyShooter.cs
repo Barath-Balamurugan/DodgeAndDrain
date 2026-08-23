@@ -13,9 +13,14 @@ public class EnemyShooter : EnemyBase
     public float fireRate = 1.2f;          // shots per second
     public float projectileSpeed = 7f;
     public float projectileLifetime = 4f;
+    public float shotTelegraphDuration = 0.35f;
+    public float aimLineLength = 4.5f;
+    public Color aimLineColor = new Color(1f, 0.3f, 0.35f, 0.9f);
 
     private Transform playerTransform;
     private float fireTimer;
+    private bool isTelegraphingShot;
+    private LineRenderer aimLine;
 
     void Start()
     {
@@ -23,6 +28,7 @@ public class EnemyShooter : EnemyBase
             playerTransform = GameManager.Instance.player.transform;
 
         fireTimer = 1f / Mathf.Max(0.01f, fireRate);
+        CreateAimLine();
     }
 
     protected override void Update()
@@ -51,12 +57,28 @@ public class EnemyShooter : EnemyBase
             transform.position += (Vector3)(moveDir * speed * Time.deltaTime);
         }
 
-        // Shoot only when inside band (or you can allow always if you prefer)
+        if (isTelegraphingShot)
+        {
+            UpdateAimLine(dirToPlayer);
+            fireTimer -= Time.deltaTime;
+            if (fireTimer <= 0f)
+            {
+                Shoot(dirToPlayer);
+                isTelegraphingShot = false;
+                aimLine.enabled = false;
+                fireTimer = Mathf.Max(0f, 1f / Mathf.Max(0.01f, fireRate) - shotTelegraphDuration);
+            }
+            return;
+        }
+
+        // Telegraph before each shot so players can recognise and dodge it.
         fireTimer -= Time.deltaTime;
         if (inRangeBand && fireTimer <= 0f)
         {
-            Shoot(dirToPlayer);
-            fireTimer = 1f / Mathf.Max(0.01f, fireRate);
+            isTelegraphingShot = true;
+            fireTimer = shotTelegraphDuration;
+            aimLine.enabled = true;
+            UpdateAimLine(dirToPlayer);
         }
     }
 
@@ -74,5 +96,33 @@ public class EnemyShooter : EnemyBase
         }
 
         Destroy(proj, projectileLifetime);
+    }
+
+    private void CreateAimLine()
+    {
+        GameObject lineObject = new GameObject("ShotWarningLine");
+        lineObject.transform.SetParent(transform, false);
+
+        aimLine = lineObject.AddComponent<LineRenderer>();
+        SpriteRenderer spriteRenderer = GetComponent<SpriteRenderer>();
+        aimLine.material = spriteRenderer.sharedMaterial;
+        aimLine.useWorldSpace = false;
+        aimLine.positionCount = 2;
+        aimLine.startWidth = 0.025f;
+        aimLine.endWidth = 0.05f;
+        aimLine.startColor = aimLineColor;
+        aimLine.endColor = aimLineColor;
+        aimLine.sortingLayerID = spriteRenderer.sortingLayerID;
+        aimLine.sortingOrder = spriteRenderer.sortingOrder + 1;
+        aimLine.enabled = false;
+    }
+
+    private void UpdateAimLine(Vector2 direction)
+    {
+        if (aimLine == null)
+            return;
+
+        aimLine.SetPosition(0, Vector3.zero);
+        aimLine.SetPosition(1, direction.normalized * aimLineLength);
     }
 }

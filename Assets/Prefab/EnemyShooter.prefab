@@ -108,6 +108,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyShapeVisual
   shapeSprite: {fileID: 7482667652216324306, guid: 17bf7d4de906b4175bc0db985a845e71, type: 3}
+  useTriangle: 0
   rotationDegrees: 0
 --- !u!50 &7086970261553575158
 Rigidbody2D:

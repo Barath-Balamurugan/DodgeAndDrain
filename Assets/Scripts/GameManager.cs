@@ -23,6 +23,19 @@ public class GameManager : MonoBehaviour
     public TMP_Text gameOverScoreText;
     public TMP_Text bestScoreText;
 
+    [Header("Drain UI")]
+    [SerializeField] private TMP_Text drainHeatText;
+    [SerializeField] private Color drainCoolColor = new Color(0.2f, 1f, 0.55f);
+    [SerializeField] private Color drainWarmColor = new Color(1f, 0.72f, 0.2f);
+    [SerializeField] private Color drainCriticalColor = new Color(1f, 0.25f, 0.35f);
+
+    [Header("Death Feedback")]
+    [SerializeField] private float deathFlashDuration = 0.16f;
+    [SerializeField] private float deathFlashOpacity = 0.65f;
+    [SerializeField] private float deathShakeDuration = 0.25f;
+    [SerializeField] private float deathShakeStrength = 0.18f;
+    [SerializeField] private bool vibrateOnDeath = true;
+
     [Header("Runtime (debug)")]
     public float drainGauge;
     public bool overheated;
@@ -32,6 +45,10 @@ public class GameManager : MonoBehaviour
 
     private float overheatTimer;
     private bool isGameOver;
+    private Image deathFlash;
+    private Coroutine deathFeedbackRoutine;
+    private Transform shakenCamera;
+    private Vector3 cameraBaseLocalPosition;
 
     public bool IsOverheated => overheated;
     public bool IsGameOver => isGameOver;
@@ -59,10 +76,71 @@ public class GameManager : MonoBehaviour
     {
         bestScore = PlayerPrefs.GetFloat("BestScore", 0f);
         EnsureGameOverResultsUI();
+        EnsureDrainHeatUI();
+        EnsureDeathFeedbackUI();
         if (gameOverPanel != null) gameOverPanel.SetActive(false);
         UpdateScoreUI();
         UpdateEnergyUI();
         UpdateGaugeUI();
+    }
+
+    private void OnDisable()
+    {
+        ResetCameraPosition();
+    }
+
+    private void EnsureDrainHeatUI()
+    {
+        if (drainHeatText != null || drainGaugeFill == null || scoreText == null)
+            return;
+
+        Transform parent = drainGaugeFill.transform.parent;
+        if (parent == null)
+            return;
+
+        drainHeatText = Instantiate(scoreText, parent, false);
+        drainHeatText.gameObject.name = "DrainHeatText";
+        drainHeatText.text = "DRAIN HEAT 0%";
+        drainHeatText.alignment = TextAlignmentOptions.Center;
+        drainHeatText.fontSize = 20f;
+        drainHeatText.color = drainCoolColor;
+        drainHeatText.margin = Vector4.zero;
+        drainHeatText.enableWordWrapping = false;
+        drainHeatText.overflowMode = TextOverflowModes.Overflow;
+        drainHeatText.raycastTarget = false;
+
+        RectTransform rect = drainHeatText.rectTransform;
+        rect.localScale = Vector3.one;
+        rect.localRotation = Quaternion.identity;
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = new Vector2(0f, 28f);
+        rect.sizeDelta = new Vector2(420f, 34f);
+    }
+
+    private void EnsureDeathFeedbackUI()
+    {
+        if (deathFlash != null || scoreText == null)
+            return;
+
+        Canvas canvas = scoreText.GetComponentInParent<Canvas>();
+        if (canvas == null)
+            return;
+
+        GameObject flashObject = new GameObject("DeathFlash", typeof(RectTransform), typeof(Image));
+        flashObject.transform.SetParent(canvas.transform, false);
+
+        RectTransform rect = flashObject.GetComponent<RectTransform>();
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.offsetMin = Vector2.zero;
+        rect.offsetMax = Vector2.zero;
+
+        deathFlash = flashObject.GetComponent<Image>();
+        deathFlash.color = new Color(1f, 0.25f, 0.35f, 0f);
+        deathFlash.raycastTarget = false;
+        flashObject.SetActive(false);
     }
 
     private void EnsureGameOverResultsUI()
@@ -191,6 +269,8 @@ public class GameManager : MonoBehaviour
         if (isGameOver) return;
         isGameOver = true;
 
+        PlayDeathFeedback();
+
         if (currentScore > bestScore)
         {
             bestScore = currentScore;
@@ -222,12 +302,108 @@ public class GameManager : MonoBehaviour
 
     private void UpdateGaugeUI()
     {
+        float gaugePercent = drainGaugeMax <= 0f ? 0f : Mathf.Clamp01(drainGauge / drainGaugeMax);
+
         if (drainGaugeFill != null)
-            drainGaugeFill.fillAmount = drainGaugeMax <= 0f ? 0f : drainGauge / drainGaugeMax;
+        {
+            drainGaugeFill.fillAmount = gaugePercent;
+            drainGaugeFill.color = GetDrainGaugeColor(gaugePercent);
+        }
+
+        if (drainHeatText != null)
+        {
+            drainHeatText.text = overheated
+                ? $"OVERHEATED — {Mathf.CeilToInt(Mathf.Max(overheatTimer, 0f))}s"
+                : $"DRAIN HEAT {Mathf.RoundToInt(gaugePercent * 100f)}%";
+            drainHeatText.color = overheated ? drainCriticalColor : GetDrainGaugeColor(gaugePercent);
+        }
+    }
+
+    private Color GetDrainGaugeColor(float gaugePercent)
+    {
+        if (overheated)
+            return drainCriticalColor;
+
+        const float warmThreshold = 0.65f;
+        return gaugePercent <= warmThreshold
+            ? Color.Lerp(drainCoolColor, drainWarmColor, gaugePercent / warmThreshold)
+            : Color.Lerp(drainWarmColor, drainCriticalColor, (gaugePercent - warmThreshold) / (1f - warmThreshold));
+    }
+
+    private void PlayDeathFeedback()
+    {
+        EnsureDeathFeedbackUI();
+
+        if (deathFeedbackRoutine != null)
+            StopCoroutine(deathFeedbackRoutine);
+
+        deathFeedbackRoutine = StartCoroutine(PlayDeathFeedbackRoutine());
+
+#if UNITY_ANDROID || UNITY_IOS
+        if (vibrateOnDeath)
+            Handheld.Vibrate();
+#endif
+    }
+
+    private System.Collections.IEnumerator PlayDeathFeedbackRoutine()
+    {
+        if (deathFlash != null)
+        {
+            deathFlash.gameObject.SetActive(true);
+            deathFlash.transform.SetAsLastSibling();
+        }
+
+        Camera gameplayCamera = Camera.main;
+        if (gameplayCamera != null)
+        {
+            shakenCamera = gameplayCamera.transform;
+            cameraBaseLocalPosition = shakenCamera.localPosition;
+        }
+
+        float totalDuration = Mathf.Max(deathFlashDuration, deathShakeDuration);
+        float elapsed = 0f;
+
+        while (elapsed < totalDuration)
+        {
+            if (deathFlash != null)
+            {
+                float flashProgress = deathFlashDuration <= 0f
+                    ? 1f
+                    : Mathf.Clamp01(elapsed / deathFlashDuration);
+                deathFlash.color = new Color(1f, 0.25f, 0.35f, Mathf.Lerp(deathFlashOpacity, 0f, flashProgress));
+            }
+
+            if (shakenCamera != null && elapsed < deathShakeDuration)
+            {
+                float shakeFalloff = 1f - Mathf.Clamp01(elapsed / deathShakeDuration);
+                Vector2 offset = Random.insideUnitCircle * deathShakeStrength * shakeFalloff;
+                shakenCamera.localPosition = cameraBaseLocalPosition + new Vector3(offset.x, offset.y, 0f);
+            }
+
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        ResetCameraPosition();
+
+        if (deathFlash != null)
+            deathFlash.gameObject.SetActive(false);
+
+        deathFeedbackRoutine = null;
+    }
+
+    private void ResetCameraPosition()
+    {
+        if (shakenCamera == null)
+            return;
+
+        shakenCamera.localPosition = cameraBaseLocalPosition;
+        shakenCamera = null;
     }
 
     public void ResetGame()
     {
+        ResetCameraPosition();
         isGameOver = false;
         drainGauge = 0f;
         overheated = false;

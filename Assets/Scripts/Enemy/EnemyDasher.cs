@@ -3,6 +3,8 @@ using System.Collections;
 
 public class EnemyDasher : EnemyBase
 {
+    private const int TelegraphSegments = 32;
+
     [Header("Movement")]
     public float approachSpeed = 1.5f;
 
@@ -16,12 +18,16 @@ public class EnemyDasher : EnemyBase
     [Header("Visual Feedback")]
     public Color windupFlashColor = Color.red;
     public float flashSpeed = 15f;
+    public float windupTelegraphRadius = 0.42f;
+    public float windupLineLength = 1.4f;
 
     private Transform playerTransform;
 
     private SpriteRenderer sr;  
     private Color originalColor;
     private bool isFlashing;
+    private LineRenderer windupRing;
+    private LineRenderer windupLine;
 
     private bool isDashing;
     private bool dashOnCooldown;
@@ -35,7 +41,10 @@ public class EnemyDasher : EnemyBase
         EnemyShapeVisual shapeVisual = GetComponent<EnemyShapeVisual>();
         sr = shapeVisual != null ? shapeVisual.Renderer : GetComponent<SpriteRenderer>();
         if (sr != null)
+        {
             originalColor = sr.color;
+            CreateWindupTelegraph();
+        }
     }
 
     protected override void Update()
@@ -73,11 +82,13 @@ public class EnemyDasher : EnemyBase
         dashOnCooldown = true;
 
         isFlashing = true;
+        SetWindupTelegraphVisible(true);
 
         float t = 0f;
         while (t < windupTime)
         {
             t += Time.deltaTime;
+            UpdateWindupTelegraph(lockedDir, Mathf.Clamp01(t / windupTime));
 
             if (sr != null)
             {
@@ -95,6 +106,7 @@ public class EnemyDasher : EnemyBase
         if (sr != null)
             sr.color = originalColor;
 
+        SetWindupTelegraphVisible(false);
         isDashing = true;
         yield return new WaitForSeconds(dashDuration);
 
@@ -102,6 +114,62 @@ public class EnemyDasher : EnemyBase
 
         yield return new WaitForSeconds(dashCooldown);
         dashOnCooldown = false;
+    }
+
+    private void CreateWindupTelegraph()
+    {
+        windupRing = CreateTelegraphLine("DashWarningRing", true);
+        windupRing.positionCount = TelegraphSegments + 1;
+
+        windupLine = CreateTelegraphLine("DashWarningLine", false);
+        windupLine.positionCount = 2;
+    }
+
+    private LineRenderer CreateTelegraphLine(string objectName, bool isLoop)
+    {
+        GameObject lineObject = new GameObject(objectName);
+        lineObject.transform.SetParent(transform, false);
+
+        LineRenderer line = lineObject.AddComponent<LineRenderer>();
+        line.useWorldSpace = false;
+        line.loop = isLoop;
+        line.material = sr.sharedMaterial;
+        line.startWidth = 0.035f;
+        line.endWidth = 0.035f;
+        line.sortingLayerID = sr.sortingLayerID;
+        line.sortingOrder = sr.sortingOrder + 1;
+        line.enabled = false;
+        return line;
+    }
+
+    private void UpdateWindupTelegraph(Vector2 direction, float progress)
+    {
+        if (windupRing == null || windupLine == null)
+            return;
+
+        float radius = Mathf.Lerp(0.08f, windupTelegraphRadius, progress);
+        for (int i = 0; i <= TelegraphSegments; i++)
+        {
+            float angle = i / (float)TelegraphSegments * Mathf.PI * 2f;
+            windupRing.SetPosition(i, new Vector3(Mathf.Cos(angle) * radius, Mathf.Sin(angle) * radius, 0f));
+        }
+
+        Color warningColor = windupFlashColor;
+        warningColor.a = Mathf.Lerp(0.35f, 1f, progress);
+        windupRing.startColor = warningColor;
+        windupRing.endColor = warningColor;
+        windupLine.startColor = warningColor;
+        windupLine.endColor = warningColor;
+        windupLine.SetPosition(0, Vector3.zero);
+        windupLine.SetPosition(1, direction.normalized * windupLineLength);
+    }
+
+    private void SetWindupTelegraphVisible(bool visible)
+    {
+        if (windupRing != null)
+            windupRing.enabled = visible;
+        if (windupLine != null)
+            windupLine.enabled = visible;
     }
 
 }

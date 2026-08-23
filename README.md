@@ -37,9 +37,15 @@ testing before applying for Google Play production access.
   enemies, and drainable objects easier to distinguish against the dark arena.
   Use stronger silhouettes/colours and clear wind-up indicators for enemy dashes
   and shots.
-  - [x] Give each enemy type a distinct silhouette: circle chaser, diamond
+  - [x] Give each enemy type a distinct silhouette: circle chaser, triangle
     dasher, and square shooter. Keep the existing enemy colours and player
     appearance unchanged.
+  - [x] Telegraph attacks: a red expanding ring and direction line for dashers,
+    a short aim line for shooters, and a bright trail for enemy projectiles.
+  - [x] Make drain heat readable: label the gauge, transition it from green to
+    amber to red, and display a three-second **OVERHEATED** countdown.
+  - [x] Add one-hit death feedback: a short flash, screen shake, and optional
+    device vibration.
 
 - [ ] **Add a gentler opening.** Give the player a 3–5 second safe period, or
   start with only chaser enemies, before introducing the full enemy mix.
