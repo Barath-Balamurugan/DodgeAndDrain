@@ -52,6 +52,7 @@ testing before applying for Google Play production access.
     controls, while keeping their original colours and gameplay hitboxes.
   - [x] Make drainable energy objects larger with a slow pulse and white glow;
     retain their existing foreground colour.
+  - [x] Add a brief white/cyan muzzle flash at the firing point for every shot.
 
 - [ ] **Add a gentler opening.** Give the player a 3–5 second safe period, or
   start with only chaser enemies, before introducing the full enemy mix.

@@ -95,21 +95,6 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
---- !u!114 &5278808157063961132
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2938172665668524332}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a43e107a1f6c4cf49b2ed86737775c7c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EnemyShapeVisual
-  shapeSprite: {fileID: 7482667652216324306, guid: 17bf7d4de906b4175bc0db985a845e71, type: 3}
-  useTriangle: 0
-  rotationDegrees: 0
 --- !u!50 &7086970261553575158
 Rigidbody2D:
   serializedVersion: 5
@@ -190,6 +175,8 @@ MonoBehaviour:
   scoreValue: 10
   minScaleFactor: 0.3
   isBeingDrained: 0
+  drainBeamWidth: 0.16
+  visualScaleMultiplier: 1
   desiredDistance: 5
   distanceTolerance: 0.75
   moveSpeedShooter: 2.5
@@ -198,6 +185,9 @@ MonoBehaviour:
   fireRate: 1.2
   projectileSpeed: 7
   projectileLifetime: 4
+  shotTelegraphDuration: 0.35
+  aimLineLength: 4.5
+  aimLineColor: {r: 1, g: 0.3, b: 0.35, a: 0.9}
 --- !u!120 &4158369707748377675
 LineRenderer:
   serializedVersion: 2
@@ -308,3 +298,18 @@ LineRenderer:
   m_UseWorldSpace: 1
   m_Loop: 0
   m_ApplyActiveColorSpace: 1
+--- !u!114 &5278808157063961132
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2938172665668524332}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a43e107a1f6c4cf49b2ed86737775c7c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyShapeVisual
+  shapeSprite: {fileID: 7482667652216324306, guid: 17bf7d4de906b4175bc0db985a845e71, type: 3}
+  useTriangle: 0
+  rotationDegrees: 0
