@@ -57,8 +57,10 @@ testing before applying for Google Play production access.
   - [x] Add hit feedback (white flash and spark burst) plus empty-ammo feedback
     (red ammo counter shake and a muted click).
 
-- [ ] **Add a gentler opening.** Give the player a 3–5 second safe period, or
+- [x] **Add a gentler opening.** Give the player a 3–5 second safe period, or
   start with only chaser enemies, before introducing the full enemy mix.
+  - [x] Added an endless wave system: chaser-only opening waves, gradual dasher
+    and shooter introduction, three-second intermissions, status UI, and rewards.
 
 - [ ] **Make death useful.** The game-over panel should show final score, best
   score, survival time, and one contextual tip, such as “Drain cyan orbs to

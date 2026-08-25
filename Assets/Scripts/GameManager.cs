@@ -252,6 +252,17 @@ public class GameManager : MonoBehaviour
         UpdateScoreUI();
     }
 
+    public void CoolDrainHeat(float amount)
+    {
+        if (amount <= 0f)
+            return;
+
+        drainGauge = Mathf.Max(0f, drainGauge - amount);
+        overheated = false;
+        overheatTimer = 0f;
+        UpdateGaugeUI();
+    }
+
     public void AddAmmo(int amount)
     {
         ammo = Mathf.Clamp(ammo + amount, 0, maxAmmo);
