@@ -18,19 +18,39 @@ public class PlayerShooter : MonoBehaviour
     [Header("Auto Target")]
     public float autoTargetMaxRange = 999f;
 
-    [Header("Muzzle Flash")]
-    [SerializeField] private Color muzzleFlashColor = new Color(0.7f, 1f, 1f, 0.95f);
-    [SerializeField, Min(0.01f)] private float muzzleFlashDuration = 0.08f;
-    [SerializeField, Min(0.01f)] private float muzzleFlashLength = 0.6f;
-    [SerializeField, Min(0.01f)] private float muzzleFlashWidth = 0.24f;
+    [Header("Recoil Kick")]
+    [SerializeField, Min(0f)] private float recoilDistance = 0.16f;
+    [SerializeField, Min(0.01f)] private float recoilDuration = 0.13f;
+    [SerializeField, Range(0f, 0.5f)] private float recoilSquashAmount = 0.16f;
+
+    [Header("Shoot Sound")]
+    [Tooltip("Optional. A short generated zap is used when no clip is assigned.")]
+    [SerializeField] private AudioClip shootSound;
+    [SerializeField, Range(0f, 1f)] private float shootVolume = 0.35f;
+    [SerializeField, Range(0f, 0.25f)] private float shootPitchVariation = 0.06f;
+
+    [Header("Empty Ammo Sound")]
+    [Tooltip("Optional. A generated two-pulse empty-ammo beep is used when no clip is assigned.")]
+    [SerializeField] private AudioClip emptyAmmoSound;
+    [SerializeField, Range(0f, 1f)] private float emptyAmmoVolume = 0.42f;
 
     private float bulletCooldownTimer;
-    private static Sprite muzzleFlashSprite;
+    private static AudioClip generatedShootSound;
+    private static AudioClip generatedEmptyAmmoSound;
+    private AudioSource shootAudioSource;
+    private Coroutine recoilRoutine;
 
     private void Awake()
     {
         if (ammo == null)
             ammo = GetComponent<PlayerAmmo>();
+
+        shootAudioSource = GetComponent<AudioSource>();
+        if (shootAudioSource == null)
+            shootAudioSource = gameObject.AddComponent<AudioSource>();
+
+        shootAudioSource.playOnAwake = false;
+        shootAudioSource.spatialBlend = 0f;
     }
 
     void Update()
@@ -46,7 +66,10 @@ public class PlayerShooter : MonoBehaviour
 
         // Spend only when shooting
         if (ammo == null || !ammo.Spend(bulletCost))
+        {
+            PlayEmptyAmmoFeedback();
             return;
+        }
 
         EnemyBase target = FindClosestEnemy(autoTargetMaxRange);
 
@@ -73,95 +96,131 @@ public class PlayerShooter : MonoBehaviour
             rb.linearVelocity = dir.normalized * bulletSpeed; // ✅ compatibility
         }
 
-        PlayMuzzleFlash(spawnPos, dir);
+        PlayRecoilKick(dir);
+        PlayShootSound();
     }
 
-    private void PlayMuzzleFlash(Vector3 position, Vector2 direction)
+    private void PlayRecoilKick(Vector2 shotDirection)
     {
-        GameObject flashObject = new GameObject("MuzzleFlash");
-        flashObject.transform.position = position;
-        flashObject.transform.rotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg);
+        PlayerMovement2D playerMovement = GetComponent<PlayerMovement2D>();
+        Transform visualTransform = playerMovement != null && playerMovement.VisualRenderer != null
+            ? playerMovement.VisualRenderer.transform
+            : null;
 
-        SpriteRenderer flashRenderer = flashObject.AddComponent<SpriteRenderer>();
-        flashRenderer.sprite = GetMuzzleFlashSprite();
-        flashRenderer.color = muzzleFlashColor;
+        if (visualTransform == null)
+            return;
 
-        SpriteRenderer playerRenderer = GetComponentInChildren<SpriteRenderer>(true);
-        if (playerRenderer != null)
-        {
-            flashRenderer.sharedMaterial = playerRenderer.sharedMaterial;
-            flashRenderer.sortingLayerID = playerRenderer.sortingLayerID;
-            flashRenderer.sortingOrder = playerRenderer.sortingOrder + 3;
-        }
-        else
-        {
-            flashRenderer.sortingOrder = 10;
-        }
+        if (recoilRoutine != null)
+            StopCoroutine(recoilRoutine);
 
-        StartCoroutine(PlayMuzzleFlashRoutine(flashObject.transform, flashRenderer));
+        Vector3 localKickDirection = visualTransform.parent.InverseTransformDirection(-shotDirection.normalized);
+        recoilRoutine = StartCoroutine(PlayRecoilKickRoutine(visualTransform, localKickDirection));
     }
 
-    private System.Collections.IEnumerator PlayMuzzleFlashRoutine(Transform flashTransform, SpriteRenderer flashRenderer)
+    private System.Collections.IEnumerator PlayRecoilKickRoutine(Transform visualTransform, Vector3 localKickDirection)
     {
-        Vector3 startScale = new Vector3(muzzleFlashLength, muzzleFlashWidth, 1f);
-        Vector3 endScale = startScale * 1.45f;
+        Vector3 restPosition = visualTransform.localPosition;
+        Vector3 restScale = visualTransform.localScale;
         float elapsed = 0f;
 
-        while (elapsed < muzzleFlashDuration)
+        while (elapsed < recoilDuration)
         {
-            float progress = elapsed / muzzleFlashDuration;
-            flashTransform.localScale = Vector3.Lerp(startScale, endScale, progress);
-            flashRenderer.color = new Color(
-                muzzleFlashColor.r,
-                muzzleFlashColor.g,
-                muzzleFlashColor.b,
-                Mathf.Lerp(muzzleFlashColor.a, 0f, progress));
+            float progress = elapsed / recoilDuration;
+            float kickAmount = Mathf.Sin(progress * Mathf.PI) * recoilDistance;
+            visualTransform.localPosition = restPosition + localKickDirection * kickAmount;
+
+            float squash = Mathf.Sin(progress * Mathf.PI) * recoilSquashAmount;
+            visualTransform.localScale = new Vector3(
+                restScale.x * (1f - squash),
+                restScale.y * (1f + squash),
+                restScale.z);
 
             elapsed += Time.deltaTime;
             yield return null;
         }
 
-        Destroy(flashTransform.gameObject);
+        visualTransform.localPosition = restPosition;
+        visualTransform.localScale = restScale;
+        recoilRoutine = null;
     }
 
-    private static Sprite GetMuzzleFlashSprite()
+    private void PlayShootSound()
     {
-        if (muzzleFlashSprite != null)
-            return muzzleFlashSprite;
+        if (shootAudioSource == null)
+            return;
 
-        const int textureSize = 32;
-        Color32[] pixels = new Color32[textureSize * textureSize];
+        AudioClip clip = shootSound != null ? shootSound : GetGeneratedShootSound();
+        shootAudioSource.pitch = Random.Range(1f - shootPitchVariation, 1f + shootPitchVariation);
+        shootAudioSource.PlayOneShot(clip, shootVolume);
+    }
 
-        for (int y = 0; y < textureSize; y++)
+    private void PlayEmptyAmmoFeedback()
+    {
+        if (ammo != null)
+            ammo.PlayEmptyAmmoFeedback();
+
+        if (shootAudioSource == null)
+            return;
+
+        AudioClip clip = emptyAmmoSound != null ? emptyAmmoSound : GetGeneratedEmptyAmmoSound();
+        shootAudioSource.pitch = 1f;
+        shootAudioSource.PlayOneShot(clip, emptyAmmoVolume);
+    }
+
+    private static AudioClip GetGeneratedShootSound()
+    {
+        if (generatedShootSound != null)
+            return generatedShootSound;
+
+        const int sampleRate = 44100;
+        const float duration = 0.075f;
+        int sampleCount = Mathf.CeilToInt(sampleRate * duration);
+        float[] samples = new float[sampleCount];
+        float phase = 0f;
+
+        for (int i = 0; i < sampleCount; i++)
         {
-            for (int x = 0; x < textureSize; x++)
-            {
-                float horizontal = (x + 0.5f) / textureSize * 2f - 1f;
-                float vertical = (y + 0.5f) / textureSize * 2f - 1f;
-                float distance = Mathf.Sqrt(horizontal * horizontal + vertical * vertical);
-                float alpha = Mathf.Clamp01(1f - distance);
-                pixels[y * textureSize + x] = new Color(1f, 1f, 1f, alpha);
-            }
+            float progress = i / (float)sampleCount;
+            float frequency = Mathf.Lerp(1150f, 420f, progress);
+            float envelope = Mathf.Pow(1f - progress, 2.2f);
+            phase += 2f * Mathf.PI * frequency / sampleRate;
+            samples[i] = (Mathf.Sin(phase) + 0.25f * Mathf.Sin(phase * 2f)) * envelope * 0.5f;
         }
 
-        Texture2D texture = new Texture2D(textureSize, textureSize, TextureFormat.RGBA32, false)
-        {
-            name = "MuzzleFlashSprite",
-            filterMode = FilterMode.Bilinear,
-            wrapMode = TextureWrapMode.Clamp,
-            hideFlags = HideFlags.HideAndDontSave
-        };
-        texture.SetPixels32(pixels);
-        texture.Apply();
+        generatedShootSound = AudioClip.Create("GeneratedShootZap", sampleCount, 1, sampleRate, false);
+        generatedShootSound.SetData(samples, 0);
+        generatedShootSound.hideFlags = HideFlags.HideAndDontSave;
+        return generatedShootSound;
+    }
 
-        muzzleFlashSprite = Sprite.Create(
-            texture,
-            new Rect(0f, 0f, textureSize, textureSize),
-            new Vector2(0.5f, 0.5f),
-            textureSize);
-        muzzleFlashSprite.name = "MuzzleFlashSprite";
-        muzzleFlashSprite.hideFlags = HideFlags.HideAndDontSave;
-        return muzzleFlashSprite;
+    private static AudioClip GetGeneratedEmptyAmmoSound()
+    {
+        if (generatedEmptyAmmoSound != null)
+            return generatedEmptyAmmoSound;
+
+        const int sampleRate = 44100;
+        const float duration = 0.14f;
+        int sampleCount = Mathf.CeilToInt(sampleRate * duration);
+        float[] samples = new float[sampleCount];
+
+        for (int i = 0; i < sampleCount; i++)
+        {
+            float time = i / (float)sampleRate;
+            float pulseStart = time < 0.045f ? 0f : 0.07f;
+            float pulseProgress = (time - pulseStart) / 0.045f;
+            bool inPulse = (time < 0.045f) || (time >= 0.07f && time < 0.115f);
+
+            if (!inPulse)
+                continue;
+
+            float envelope = Mathf.Sin(Mathf.Clamp01(pulseProgress) * Mathf.PI);
+            samples[i] = Mathf.Sin(time * 2f * Mathf.PI * 340f) * envelope * 0.35f;
+        }
+
+        generatedEmptyAmmoSound = AudioClip.Create("GeneratedEmptyAmmoClick", sampleCount, 1, sampleRate, false);
+        generatedEmptyAmmoSound.SetData(samples, 0);
+        generatedEmptyAmmoSound.hideFlags = HideFlags.HideAndDontSave;
+        return generatedEmptyAmmoSound;
     }
 
     private Vector3 GetFirePos()

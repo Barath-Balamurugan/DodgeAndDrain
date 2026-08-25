@@ -23,6 +23,10 @@ public class EnemyBase : MonoBehaviour
     [SerializeField, Min(0.1f)] private float visualScaleMultiplier = 1.75f;
     private bool visualScaleApplied;
 
+    [Header("Hit Feedback")]
+    [SerializeField, Min(0.01f)] private float hitFlashDuration = 0.07f;
+    private Coroutine hitFlashRoutine;
+
     protected virtual void Awake()
     {
         currentHealth = maxHealth;
@@ -142,6 +146,51 @@ public class EnemyBase : MonoBehaviour
             currentHealth = 0f;
             Die();
         }
+    }
+
+    public void PlayHitFeedback()
+    {
+        SpriteRenderer visualRenderer = GetVisibleSpriteRenderer();
+        if (visualRenderer == null)
+            return;
+
+        if (hitFlashRoutine != null)
+            StopCoroutine(hitFlashRoutine);
+
+        hitFlashRoutine = StartCoroutine(PlayHitFlashRoutine(visualRenderer));
+    }
+
+    private System.Collections.IEnumerator PlayHitFlashRoutine(SpriteRenderer visualRenderer)
+    {
+        Color originalColor = visualRenderer.color;
+        Color flashColor = Color.white;
+        flashColor.a = originalColor.a;
+        float elapsed = 0f;
+
+        while (elapsed < hitFlashDuration)
+        {
+            float progress = elapsed / hitFlashDuration;
+            visualRenderer.color = Color.Lerp(flashColor, originalColor, progress);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        if (visualRenderer != null)
+            visualRenderer.color = originalColor;
+
+        hitFlashRoutine = null;
+    }
+
+    private SpriteRenderer GetVisibleSpriteRenderer()
+    {
+        SpriteRenderer[] renderers = GetComponentsInChildren<SpriteRenderer>(true);
+        foreach (SpriteRenderer renderer in renderers)
+        {
+            if (renderer.enabled)
+                return renderer;
+        }
+
+        return null;
     }
 
     protected void UpdateVisuals()

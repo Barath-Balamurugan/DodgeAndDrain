@@ -3394,7 +3394,7 @@ MonoBehaviour:
     startInterval: 1.5
     minInterval: 0.1
     intervalDecreasePerMinute: 0.4
-    spawnChance: 0
+    spawnChance: 0.75
     maxAlive: 50
     currentInterval: 0
     timer: 0
@@ -3402,7 +3402,7 @@ MonoBehaviour:
     startInterval: 4
     minInterval: 0.8
     intervalDecreasePerMinute: 0.5
-    spawnChance: 0
+    spawnChance: 0.5
     maxAlive: 10
     currentInterval: 0
     timer: 0
@@ -3410,7 +3410,7 @@ MonoBehaviour:
     startInterval: 8
     minInterval: 1.4
     intervalDecreasePerMinute: 0.5
-    spawnChance: 0
+    spawnChance: 0.25
     maxAlive: 5
     currentInterval: 0
     timer: 0
@@ -21671,6 +21671,13 @@ MonoBehaviour:
   bulletCost: 1
   baseDamage: 20
   autoTargetMaxRange: 25
+  recoilDistance: 0.08
+  recoilDuration: 0.09
+  shootSound: {fileID: 0}
+  shootVolume: 0.35
+  shootPitchVariation: 0.06
+  emptyAmmoSound: {fileID: 0}
+  emptyAmmoVolume: 0.25
 --- !u!1 &4577052908368366635
 GameObject:
   m_ObjectHideFlags: 0
@@ -31578,6 +31585,9 @@ MonoBehaviour:
   ammoText: {fileID: 1816146898}
   maxAmmo: 50
   currentAmmo: 15
+  emptyShakeDistance: 14
+  emptyShakeDuration: 0.16
+  emptyAmmoColor: {r: 1, g: 0.3, b: 0.35, a: 1}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
