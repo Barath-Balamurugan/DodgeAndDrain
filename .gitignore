@@ -1,0 +1,60 @@
+# Unity generated folders (rebuilt automatically when the project opens)
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# Unity Android build temp
+/.utmp/
+
+# IDE-generated project files
+*.csproj
+*.unityproj
+*.sln
+*.slnx
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+.vs/
+.gradle/
+.consulo/
+ExportedObj/
+sysinfo.txt
+mono_crash.*
+*.tmp
+
+# ...but keep debug symbols that ship inside plugins (External Dependency Manager)
+!/[Aa]ssets/**/*.pdb
+!/[Aa]ssets/**/*.pdb.meta
+
+# Build outputs
+*.apk
+*.aab
+*.app
+*.unitypackage
+*.unitypackage.meta
+crashlytics-build.properties
+
+# Signing keys: never commit. Keep a backup somewhere safe outside the repo.
+*.keystore
+*.keystore.meta
+*.jks
+*.jks.meta
+
+# macOS
+.DS_Store
