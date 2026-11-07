@@ -27,6 +27,23 @@ public class EnemyBase : MonoBehaviour
     [SerializeField, Min(0.01f)] private float hitFlashDuration = 0.07f;
     private Coroutine hitFlashRoutine;
 
+    // Damage from player bullets already in flight. Auto-aim uses it to skip
+    // enemies that are about to die instead of spending ammo on overkill.
+    private float incomingDamage;
+
+    public bool IsCoveredByIncomingShots => currentHealth - incomingDamage <= 0f;
+
+    public void ReserveIncomingDamage(float amount)
+    {
+        if (amount > 0f)
+            incomingDamage += amount;
+    }
+
+    public void ReleaseIncomingDamage(float amount)
+    {
+        incomingDamage = Mathf.Max(0f, incomingDamage - amount);
+    }
+
     protected virtual void Awake()
     {
         currentHealth = maxHealth;
@@ -146,6 +163,11 @@ public class EnemyBase : MonoBehaviour
             currentHealth = 0f;
             Die();
         }
+        else if (GameFeedback.Instance != null)
+        {
+            // Kills get their own, bigger sound in Die().
+            GameFeedback.Instance.PlayEnemyHit();
+        }
     }
 
     public void PlayHitFeedback()
@@ -213,6 +235,15 @@ public class EnemyBase : MonoBehaviour
         if (GameManager.Instance != null)
         {
             GameManager.Instance.AddScore(scoreValue);
+        }
+
+        if (GameFeedback.Instance != null)
+        {
+            // The root renderer is hidden (visuals live on a scaled child) but keeps
+            // the enemy's base colour, unaffected by the white hit flash.
+            SpriteRenderer baseRenderer = GetComponent<SpriteRenderer>();
+            Color enemyColor = baseRenderer != null ? baseRenderer.color : Color.white;
+            GameFeedback.Instance.PlayEnemyKilled(transform.position, enemyColor, scoreValue, maxHealth, baseRenderer);
         }
 
         Destroy(gameObject);

@@ -2,6 +2,9 @@ using UnityEngine;
 
 public class DrainableSpawner : MonoBehaviour
 {
+    public static DrainableSpawner Instance { get; private set; }
+    public static bool AreDrainablesPaused { get; private set; }
+
     [System.Serializable]
     public class SpawnOption
     {
@@ -34,23 +37,28 @@ public class DrainableSpawner : MonoBehaviour
     public bool startOnPlay = true;
 
     private bool spawning;
+    private Vector3 arenaMin;
+    private Vector3 arenaMax;
+    private bool hasCachedArenaBounds;
+
+    private void Awake()
+    {
+        Instance = this;
+    }
 
     private void Start()
     {
         if (cam == null) cam = Camera.main;
 
-        for (int i = 0; i < spawnOptions.Length; i++)
-        {
-            spawnOptions[i].currentInterval = spawnOptions[i].startInterval;
-            spawnOptions[i].timer = spawnOptions[i].currentInterval;
-        }
+        CacheArenaBounds();
+        ResetSpawnTimers();
 
         spawning = startOnPlay;
     }
 
     private void Update()
     {
-        if (!spawning) return;
+        if (!spawning || AreDrainablesPaused) return;
 
         for (int i = 0; i < spawnOptions.Length; i++)
         {
@@ -82,16 +90,37 @@ public class DrainableSpawner : MonoBehaviour
 
     private Vector3 GetRandomPointInCameraBounds()
     {
-        if (cam == null) cam = Camera.main;
+        if (!hasCachedArenaBounds)
+            CacheArenaBounds();
 
-        // For 2D orthographic, z doesn't matter much, but we keep it stable.
-        Vector3 bl = cam.ViewportToWorldPoint(new Vector3(0f, 0f, cam.nearClipPlane));
-        Vector3 tr = cam.ViewportToWorldPoint(new Vector3(1f, 1f, cam.nearClipPlane));
-
-        float x = Random.Range(bl.x + margin, tr.x - margin);
-        float y = Random.Range(bl.y + margin, tr.y - margin);
+        float x = Random.Range(arenaMin.x + margin, arenaMax.x - margin);
+        float y = Random.Range(arenaMin.y + margin, arenaMax.y - margin);
 
         return new Vector3(x, y, spawnZ);
+    }
+
+    private void CacheArenaBounds()
+    {
+        if (cam == null)
+            cam = Camera.main;
+
+        if (cam == null)
+            return;
+
+        float planeDistance = Mathf.Abs(cam.transform.position.z - spawnZ);
+        arenaMin = cam.ViewportToWorldPoint(new Vector3(0f, 0f, planeDistance));
+        arenaMax = cam.ViewportToWorldPoint(new Vector3(1f, 1f, planeDistance));
+        hasCachedArenaBounds = true;
+    }
+
+    public bool TryGetArenaBounds(out Vector3 min, out Vector3 max)
+    {
+        if (!hasCachedArenaBounds)
+            CacheArenaBounds();
+
+        min = arenaMin;
+        max = arenaMax;
+        return hasCachedArenaBounds;
     }
 
     private int CountAliveOfPrefab(GameObject prefab)
@@ -110,6 +139,57 @@ public class DrainableSpawner : MonoBehaviour
         return count;
     }
 
-    public void StartSpawning() => spawning = true;
-    public void StopSpawning() => spawning = false;
+    public void StartSpawning()
+    {
+        AreDrainablesPaused = false;
+        spawning = true;
+    }
+
+    public void StopSpawning()
+    {
+        AreDrainablesPaused = false;
+        spawning = false;
+    }
+
+    public void PauseForPowerUpSelection()
+    {
+        AreDrainablesPaused = true;
+    }
+
+    public void ResumeAfterPowerUpSelection()
+    {
+        AreDrainablesPaused = false;
+        spawning = true;
+    }
+
+    public void ResetForNewRun()
+    {
+        AreDrainablesPaused = false;
+        ResetSpawnTimers();
+
+        DrainableBase[] drainables = FindObjectsOfType<DrainableBase>();
+        foreach (DrainableBase drainable in drainables)
+        {
+            if (drainable != null)
+                Destroy(drainable.gameObject);
+        }
+    }
+
+    private void ResetSpawnTimers()
+    {
+        for (int index = 0; index < spawnOptions.Length; index++)
+        {
+            spawnOptions[index].currentInterval = spawnOptions[index].startInterval;
+            spawnOptions[index].timer = spawnOptions[index].currentInterval;
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+        {
+            Instance = null;
+            AreDrainablesPaused = false;
+        }
+    }
 }

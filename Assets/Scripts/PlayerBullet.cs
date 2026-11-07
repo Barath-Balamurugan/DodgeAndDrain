@@ -16,6 +16,11 @@ public class PlayerBullet : MonoBehaviour
     [SerializeField, Min(0f)] private float hitSparkSpeed = 2.6f;
     [SerializeField, Min(0.01f)] private float hitSparkLifetime = 0.18f;
 
+    private EnemyBase reservedTarget;
+    private float reservedDamage;
+    private Vector2 reservationStart;
+    private float reservationDistance;
+
     private void Awake()
     {
         ConfigureTrail();
@@ -24,6 +29,45 @@ public class PlayerBullet : MonoBehaviour
     private void Start()
     {
         Destroy(gameObject, lifeTime);
+    }
+
+    // Tells the target this bullet's damage is on its way, so auto-aim stops
+    // firing extra bullets at an enemy that is already going to die.
+    public void ReserveDamageOn(EnemyBase target)
+    {
+        ReleaseReservation();
+        if (target == null)
+            return;
+
+        reservedTarget = target;
+        reservedDamage = damage;
+        reservationStart = transform.position;
+        // Slightly past the target: a bullet that travels this far has missed.
+        reservationDistance = Vector2.Distance(transform.position, target.transform.position) + 1f;
+        target.ReserveIncomingDamage(reservedDamage);
+    }
+
+    private void Update()
+    {
+        if (reservedTarget == null)
+            return;
+
+        if (((Vector2)transform.position - reservationStart).sqrMagnitude > reservationDistance * reservationDistance)
+            ReleaseReservation();
+    }
+
+    private void OnDestroy()
+    {
+        ReleaseReservation();
+    }
+
+    private void ReleaseReservation()
+    {
+        if (reservedTarget != null)
+            reservedTarget.ReleaseIncomingDamage(reservedDamage);
+
+        reservedTarget = null;
+        reservedDamage = 0f;
     }
 
     private void ConfigureTrail()
@@ -51,6 +95,7 @@ public class PlayerBullet : MonoBehaviour
         {
             enemy.PlayHitFeedback();
             CreateHitSparks(transform.position);
+            ReleaseReservation();
             enemy.TakeDamage(damage);
             Destroy(gameObject);
         }

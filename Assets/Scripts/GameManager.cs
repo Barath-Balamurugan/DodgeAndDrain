@@ -36,6 +36,11 @@ public class GameManager : MonoBehaviour
     [SerializeField] private float deathShakeStrength = 0.18f;
     [SerializeField] private bool vibrateOnDeath = true;
 
+    [Header("Wave Reward Feedback")]
+    [SerializeField] private Color drainHeatRewardColor = new Color(0.8f, 1f, 1f, 1f);
+    [SerializeField, Min(0.01f)] private float drainHeatSweepDuration = 0.35f;
+    [SerializeField, Min(1f)] private float drainHeatSweepWidth = 120f;
+
     [Header("Runtime (debug)")]
     public float drainGauge;
     public bool overheated;
@@ -46,9 +51,12 @@ public class GameManager : MonoBehaviour
     private float overheatTimer;
     private bool isGameOver;
     private Image deathFlash;
+    private Image drainHeatRewardSweep;
     private Coroutine deathFeedbackRoutine;
+    private Coroutine drainHeatRewardRoutine;
     private Transform shakenCamera;
     private Vector3 cameraBaseLocalPosition;
+    private float baseGaugeIncreasePerSecond;
 
     public bool IsOverheated => overheated;
     public bool IsGameOver => isGameOver;
@@ -69,6 +77,7 @@ public class GameManager : MonoBehaviour
             return;
         }
         Instance = this;
+        baseGaugeIncreasePerSecond = gaugeIncreasePerSecond;
         // DontDestroyOnLoad(this.gameObject); // enable if you use multiple scenes
     }
 
@@ -209,6 +218,9 @@ public class GameManager : MonoBehaviour
                 // restart slightly warm
                 drainGauge = drainGaugeMax * 0.3f;
                 UpdateGaugeUI();
+
+                if (GameFeedback.Instance != null)
+                    GameFeedback.Instance.PlayOverheatRecovered();
             }
             return;
         }
@@ -224,6 +236,9 @@ public class GameManager : MonoBehaviour
 
                 // force stop draining
                 player.SetDraining(false);
+
+                if (GameFeedback.Instance != null)
+                    GameFeedback.Instance.PlayOverheat();
             }
         }
         else
@@ -263,6 +278,89 @@ public class GameManager : MonoBehaviour
         UpdateGaugeUI();
     }
 
+    public void MultiplyDrainHeatBuildRate(float multiplier)
+    {
+        if (multiplier > 0f)
+            gaugeIncreasePerSecond *= multiplier;
+    }
+
+    public void ResetPowerUpModifiers()
+    {
+        gaugeIncreasePerSecond = baseGaugeIncreasePerSecond;
+    }
+
+    public void PlayDrainHeatRewardFeedback()
+    {
+        if (drainGaugeFill == null)
+            return;
+
+        EnsureDrainHeatRewardSweep();
+        if (drainHeatRewardSweep == null)
+            return;
+
+        if (drainHeatRewardRoutine != null)
+            StopCoroutine(drainHeatRewardRoutine);
+
+        drainHeatRewardRoutine = StartCoroutine(PlayDrainHeatRewardFeedbackRoutine());
+    }
+
+    private void EnsureDrainHeatRewardSweep()
+    {
+        if (drainHeatRewardSweep != null || drainGaugeFill == null || drainGaugeFill.transform.parent == null)
+            return;
+
+        GameObject sweepObject = new GameObject("DrainHeatRewardSweep", typeof(RectTransform), typeof(Image));
+        sweepObject.transform.SetParent(drainGaugeFill.transform.parent, false);
+
+        drainHeatRewardSweep = sweepObject.GetComponent<Image>();
+        drainHeatRewardSweep.sprite = drainGaugeFill.sprite;
+        drainHeatRewardSweep.type = Image.Type.Simple;
+        drainHeatRewardSweep.raycastTarget = false;
+        drainHeatRewardSweep.color = new Color(drainHeatRewardColor.r, drainHeatRewardColor.g, drainHeatRewardColor.b, 0f);
+        sweepObject.transform.SetAsLastSibling();
+
+        RectTransform rect = drainHeatRewardSweep.rectTransform;
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+    }
+
+    private System.Collections.IEnumerator PlayDrainHeatRewardFeedbackRoutine()
+    {
+        RectTransform gaugeRect = drainGaugeFill.rectTransform;
+        RectTransform sweepRect = drainHeatRewardSweep.rectTransform;
+        float gaugeWidth = gaugeRect.rect.width;
+        float sweepWidth = Mathf.Min(drainHeatSweepWidth, gaugeWidth);
+
+        sweepRect.sizeDelta = new Vector2(sweepWidth, gaugeRect.rect.height + 6f);
+
+        float startX = -gaugeWidth * 0.5f - sweepWidth * 0.5f;
+        float endX = gaugeWidth * 0.5f + sweepWidth * 0.5f;
+        float elapsed = 0f;
+
+        while (elapsed < drainHeatSweepDuration)
+        {
+            float progress = elapsed / drainHeatSweepDuration;
+            sweepRect.anchoredPosition = new Vector2(Mathf.Lerp(startX, endX, progress), 0f);
+            float alpha = Mathf.Sin(progress * Mathf.PI) * 0.9f;
+            drainHeatRewardSweep.color = new Color(
+                drainHeatRewardColor.r,
+                drainHeatRewardColor.g,
+                drainHeatRewardColor.b,
+                alpha);
+
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        drainHeatRewardSweep.color = new Color(
+            drainHeatRewardColor.r,
+            drainHeatRewardColor.g,
+            drainHeatRewardColor.b,
+            0f);
+        drainHeatRewardRoutine = null;
+    }
+
     public void AddAmmo(int amount)
     {
         ammo = Mathf.Clamp(ammo + amount, 0, maxAmmo);
@@ -279,6 +377,12 @@ public class GameManager : MonoBehaviour
     {
         if (isGameOver) return;
         isGameOver = true;
+
+        if (DrainableSpawner.Instance != null)
+        {
+            DrainableSpawner.Instance.StopSpawning();
+            DrainableSpawner.Instance.PauseForPowerUpSelection();
+        }
 
         PlayDeathFeedback();
 
@@ -414,6 +518,7 @@ public class GameManager : MonoBehaviour
 
     public void ResetGame()
     {
+        StopTransientFeedback();
         ResetCameraPosition();
         isGameOver = false;
         drainGauge = 0f;
@@ -422,31 +527,82 @@ public class GameManager : MonoBehaviour
         currentScore = 0f;
         SetPlayerVisualVisible(true);
         trailRenderer.enabled = true;
-        deathParticles.Stop();
+        deathParticles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
 
         if (gameOverPanel != null) gameOverPanel.SetActive(false);
         UpdateEnergyUI();
         UpdateScoreUI();
         UpdateGaugeUI();
 
+        ResetPlayerForNewRun();
         DestroyAllEnemies();
+        DestroyAllProjectiles();
+        if (DrainableSpawner.Instance != null)
+            DrainableSpawner.Instance.ResetForNewRun();
+    }
+
+    public void RestartRun()
+    {
+        ResetGame();
+
+        EnemySpawner enemySpawner = FindObjectOfType<EnemySpawner>();
+        if (enemySpawner != null)
+            enemySpawner.StartSpawning();
+    }
+
+    private void ResetPlayerForNewRun()
+    {
+        if (player != null)
+        {
+            player.ResetForNewRun();
+
+            PlayerAmmo playerAmmo = player.GetComponent<PlayerAmmo>();
+            if (playerAmmo != null)
+                playerAmmo.ResetForNewRun();
+
+            PlayerShooter playerShooter = player.GetComponent<PlayerShooter>();
+            if (playerShooter != null)
+                playerShooter.ResetForNewRun();
+        }
+
+        DrainZone drainZone = FindObjectOfType<DrainZone>();
+        if (drainZone != null)
+            drainZone.ResetForNewRun();
     }
 
     public void RevivePlayer()
     {
+        if (!isGameOver)
+            return;
+
+        StopTransientFeedback();
+        ResetCameraPosition();
         isGameOver = false;
+
+        // Come back with a clean slate: no leftover heat, enemies, or shots in flight.
+        drainGauge = 0f;
+        overheated = false;
+        overheatTimer = 0f;
+        UpdateGaugeUI();
 
         SetPlayerVisualVisible(true);
         trailRenderer.enabled = true;
-        deathParticles.Stop();
+        deathParticles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
 
         if (gameOverPanel != null) gameOverPanel.SetActive(false);
 
-        DestroyAllEnemies();
+        if (player != null)
+            player.SetDraining(false);
 
-        // Optionally restore some energy or score on revive
-        // currentEnergy = Mathf.Max(currentEnergy, 10f);
-        // UpdateEnergyUI();
+        DestroyAllEnemies();
+        DestroyAllProjectiles();
+
+        // GameOver froze the drainables; the wave system decides how the run resumes.
+        EnemySpawner enemySpawner = FindObjectOfType<EnemySpawner>();
+        if (enemySpawner != null)
+            enemySpawner.OnPlayerRevived();
+        else if (DrainableSpawner.Instance != null)
+            DrainableSpawner.Instance.StartSpawning();
     }
 
     public void DestroyAllEnemies()
@@ -455,6 +611,51 @@ public class GameManager : MonoBehaviour
         foreach (EnemyBase enemy in enemies)
         {
             Destroy(enemy.gameObject);
+        }
+    }
+
+    private void DestroyAllProjectiles()
+    {
+        PlayerBullet[] bullets = FindObjectsOfType<PlayerBullet>();
+        foreach (PlayerBullet bullet in bullets)
+        {
+            if (bullet != null)
+                Destroy(bullet.gameObject);
+        }
+
+        EnemyProjectile[] enemyProjectiles = FindObjectsOfType<EnemyProjectile>();
+        foreach (EnemyProjectile projectile in enemyProjectiles)
+        {
+            if (projectile != null)
+                Destroy(projectile.gameObject);
+        }
+    }
+
+    private void StopTransientFeedback()
+    {
+        if (deathFeedbackRoutine != null)
+            StopCoroutine(deathFeedbackRoutine);
+
+        deathFeedbackRoutine = null;
+
+        if (deathFlash != null)
+        {
+            deathFlash.color = new Color(1f, 0.25f, 0.35f, 0f);
+            deathFlash.gameObject.SetActive(false);
+        }
+
+        if (drainHeatRewardRoutine != null)
+            StopCoroutine(drainHeatRewardRoutine);
+
+        drainHeatRewardRoutine = null;
+
+        if (drainHeatRewardSweep != null)
+        {
+            drainHeatRewardSweep.color = new Color(
+                drainHeatRewardColor.r,
+                drainHeatRewardColor.g,
+                drainHeatRewardColor.b,
+                0f);
         }
     }
 

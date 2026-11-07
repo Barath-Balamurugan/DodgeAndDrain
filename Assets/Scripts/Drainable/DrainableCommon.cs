@@ -10,10 +10,14 @@ public class DrainableCommon : DrainableBase
     private float dirTimer;
 
     private Camera cam;
+    private Vector3 arenaMin;
+    private Vector3 arenaMax;
+    private bool hasArenaBounds;
 
     void Start()
     {
         cam = Camera.main;
+        CacheArenaBounds();
         PickNewDirection();
         dirTimer = directionChangeInterval;
     }
@@ -22,6 +26,7 @@ public class DrainableCommon : DrainableBase
     {
         base.Update();
         if (cam == null) return;
+        if (DrainableSpawner.AreDrainablesPaused) return;
 
         // Move
         transform.position += (Vector3)(moveDir * moveSpeed * Time.deltaTime);
@@ -48,11 +53,14 @@ public class DrainableCommon : DrainableBase
     {
         Vector3 pos = transform.position;
 
-        Vector3 min = cam.ViewportToWorldPoint(new Vector3(0f, 0f, cam.nearClipPlane));
-        Vector3 max = cam.ViewportToWorldPoint(new Vector3(1f, 1f, cam.nearClipPlane));
+        if (!hasArenaBounds)
+            CacheArenaBounds();
 
-        min += Vector3.one * boundsPadding;
-        max -= Vector3.one * boundsPadding;
+        if (!hasArenaBounds)
+            return;
+
+        Vector3 min = arenaMin + new Vector3(boundsPadding, boundsPadding, 0f);
+        Vector3 max = arenaMax - new Vector3(boundsPadding, boundsPadding, 0f);
 
         bool bounced = false;
 
@@ -76,5 +84,22 @@ public class DrainableCommon : DrainableBase
         pos.z = 0f;
 
         transform.position = pos;
+    }
+
+    private void CacheArenaBounds()
+    {
+        if (DrainableSpawner.Instance != null && DrainableSpawner.Instance.TryGetArenaBounds(out arenaMin, out arenaMax))
+        {
+            hasArenaBounds = true;
+            return;
+        }
+
+        if (cam == null)
+            return;
+
+        float planeDistance = Mathf.Abs(cam.transform.position.z - transform.position.z);
+        arenaMin = cam.ViewportToWorldPoint(new Vector3(0f, 0f, planeDistance));
+        arenaMax = cam.ViewportToWorldPoint(new Vector3(1f, 1f, planeDistance));
+        hasArenaBounds = true;
     }
 }

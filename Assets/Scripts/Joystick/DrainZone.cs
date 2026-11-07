@@ -38,6 +38,7 @@ public class DrainZone : MonoBehaviour
             player != null &&
             gameManager != null &&
             player.isDraining &&
+            !DrainableSpawner.AreDrainablesPaused &&
             !gameManager.IsOverheated &&
             !gameManager.IsGameOver;
 
@@ -94,6 +95,17 @@ public class DrainZone : MonoBehaviour
 
     private void OnDisable()
     {
+        StopDrainVisuals();
+    }
+
+    public void ResetForNewRun()
+    {
+        ammoCarry = 0f;
+        wasActive = false;
+
+        if (col != null)
+            col.enabled = false;
+
         StopDrainVisuals();
     }
 

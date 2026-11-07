@@ -189,6 +189,9 @@ public class DrainableBase : MonoBehaviour
             GameManager.Instance.AddScore(scoreValue);
         }
 
+        if (GameFeedback.Instance != null)
+            GameFeedback.Instance.PlayDrainableConsumed(transform.position, GetComponent<SpriteRenderer>());
+
         Destroy(gameObject);
     }
 

@@ -19,7 +19,7 @@ testing before applying for Google Play production access.
   from `GameManager` and keep `PlayerAmmo` as the single system that stores and
   displays ammunition.
 
-- [ ] **Make restart a complete fresh run.** Reset the player's position,
+- [x] **Make restart a complete fresh run.** Reset the player's position,
   ammunition, drain state, score, energy, and active enemies/drainables when
   Restart is pressed.
 
@@ -61,6 +61,22 @@ testing before applying for Google Play production access.
   start with only chaser enemies, before introducing the full enemy mix.
   - [x] Added an endless wave system: chaser-only opening waves, gradual dasher
     and shooter introduction, three-second intermissions, status UI, and rewards.
+    Wave 1 starts 12 units away; each later wave moves 0.75 units closer, down
+    to 7 units.
+    Each new wave is announced with a large centred title before it moves into
+    the normal wave-status position and enemy spawning begins.
+    The wave title renders above gameplay. Pressing Start smoothly zooms closer
+    to the player; it returns to the normal view as Wave 1 begins spawning.
+    The intermission has no countdown text, so the title is the only next-wave
+    announcement.
+    Wave completion gives visual-only rewards: a player-centred pulse ring,
+    inward ammo shards and ammo-counter pop, plus a cooling sweep on Drain Heat.
+    After every cleared wave, the camera zooms into the player and offers three
+    tall Common power-up cards. Each card has a procedural neon ability icon,
+    rarity badge and stat chip; the selected upgrade lasts for that run only.
+    Drainable bounds stay fixed during these camera moves; their spawning and
+    movement pause during card selection and reset cleanly between runs. The
+    gameplay UI canvas renders above drainable visuals and drain beams.
 
 - [ ] **Make death useful.** The game-over panel should show final score, best
   score, survival time, and one contextual tip, such as “Drain cyan orbs to

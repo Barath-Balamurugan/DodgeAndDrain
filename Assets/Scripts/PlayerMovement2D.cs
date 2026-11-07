@@ -19,9 +19,17 @@ public class PlayerMovement2D : MonoBehaviour
     private Vector2 maxBounds;
     private float halfWidth;
     private float halfHeight;
+    private float baseMoveSpeed;
+    private float baseReducedMoveSpeed;
+    private Vector3 startingPosition;
+    private Quaternion startingRotation;
 
     private void Awake()
     {
+        baseMoveSpeed = moveSpeed;
+        baseReducedMoveSpeed = reducedMoveSpeed;
+        startingPosition = transform.position;
+        startingRotation = transform.rotation;
         CreateScaledPlayerVisual();
 
         rb = GetComponent<Rigidbody2D>();
@@ -78,21 +86,58 @@ public class PlayerMovement2D : MonoBehaviour
         if (joystick != null)
             input = joystick.Direction;
 
-        // Move with physics velocity
-        rb.linearVelocity = input * currSpeed;
+        UpdateCameraBounds();
 
-        // Clamp position so player stays in view
-        Vector2 pos = rb.position;
+        Vector2 nextPosition = rb.position + input * currSpeed * Time.fixedDeltaTime;
+        float minX = minBounds.x + halfWidth;
+        float maxX = maxBounds.x - halfWidth;
+        float minY = minBounds.y + halfHeight;
+        float maxY = maxBounds.y - halfHeight;
 
-        float clampedX = Mathf.Clamp(pos.x, minBounds.x + halfWidth,  maxBounds.x - halfWidth);
-        float clampedY = Mathf.Clamp(pos.y, minBounds.y + halfHeight, maxBounds.y - halfHeight);
+        nextPosition.x = minX <= maxX
+            ? Mathf.Clamp(nextPosition.x, minX, maxX)
+            : (minBounds.x + maxBounds.x) * 0.5f;
+        nextPosition.y = minY <= maxY
+            ? Mathf.Clamp(nextPosition.y, minY, maxY)
+            : (minBounds.y + maxBounds.y) * 0.5f;
 
-        rb.position = new Vector2(clampedX, clampedY);
+        rb.MovePosition(nextPosition);
     }
 
     public void SetDraining(bool draining)
     {
         isDraining = draining;
+    }
+
+    public void MultiplyMoveSpeed(float multiplier)
+    {
+        if (multiplier <= 0f)
+            return;
+
+        moveSpeed *= multiplier;
+        reducedMoveSpeed *= multiplier;
+    }
+
+    public void ResetPowerUpModifiers()
+    {
+        moveSpeed = baseMoveSpeed;
+        reducedMoveSpeed = baseReducedMoveSpeed;
+    }
+
+    public void ResetForNewRun()
+    {
+        isDraining = false;
+        transform.SetPositionAndRotation(startingPosition, startingRotation);
+
+        if (rb != null)
+        {
+            rb.position = (Vector2)startingPosition;
+            rb.rotation = startingRotation.eulerAngles.z;
+            rb.linearVelocity = Vector2.zero;
+            rb.angularVelocity = 0f;
+        }
+
+        UpdateCameraBounds();
     }
 
     private void CreateScaledPlayerVisual()

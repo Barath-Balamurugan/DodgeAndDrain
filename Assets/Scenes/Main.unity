@@ -670,7 +670,7 @@ RectTransform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1218229518}
-  m_Father: {fileID: 1926629631}
+  m_Father: {fileID: 232309500}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 1}
   m_AnchorMax: {x: 0.5, y: 1}
@@ -788,14 +788,14 @@ Canvas:
   m_PlaneDistance: 100
   m_PixelPerfect: 1
   m_ReceivesEvents: 1
-  m_OverrideSorting: 0
+  m_OverrideSorting: 1
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
   m_VertexColorAlwaysGammaSpace: 0
   m_AdditionalShaderChannelsFlag: 25
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
-  m_SortingOrder: 0
+  m_SortingOrder: 50
   m_TargetDisplay: 0
 --- !u!224 &232309500
 RectTransform:
@@ -810,6 +810,7 @@ RectTransform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1926629631}
+  - {fileID: 228060078}
   - {fileID: 1982238485}
   - {fileID: 108885294}
   - {fileID: 1416369298}
@@ -2810,7 +2811,7 @@ MonoBehaviour:
         m_Calls:
         - m_Target: {fileID: 3544460516597441635}
           m_TargetAssemblyTypeName: PlayerShooter, Assembly-CSharp
-          m_MethodName: ShootClosestEnemy
+          m_MethodName: PressTrigger
           m_Mode: 1
           m_Arguments:
             m_ObjectArgument: {fileID: 0}
@@ -2823,7 +2824,19 @@ MonoBehaviour:
   - eventID: 3
     callback:
       m_PersistentCalls:
-        m_Calls: []
+        m_Calls:
+        - m_Target: {fileID: 3544460516597441635}
+          m_TargetAssemblyTypeName: PlayerShooter, Assembly-CSharp
+          m_MethodName: ReleaseTrigger
+          m_Mode: 1
+          m_Arguments:
+            m_ObjectArgument: {fileID: 0}
+            m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+            m_IntArgument: 0
+            m_FloatArgument: 0
+            m_StringArgument:
+            m_BoolArgument: 0
+          m_CallState: 2
 --- !u!114 &717725083
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3396,25 +3409,43 @@ MonoBehaviour:
     intervalDecreasePerMinute: 0.4
     spawnChance: 0.75
     maxAlive: 50
-    currentInterval: 0
-    timer: 0
   - prefab: {fileID: 7180091943707468953, guid: ce157d9d6bce04ac2ab2d7075a0de79c, type: 3}
     startInterval: 4
     minInterval: 0.8
     intervalDecreasePerMinute: 0.5
     spawnChance: 0.5
     maxAlive: 10
-    currentInterval: 0
-    timer: 0
   - prefab: {fileID: -2798006501564830408, guid: 193503e87194c458db2fb2dca48f7e12, type: 3}
     startInterval: 8
     minInterval: 1.4
     intervalDecreasePerMinute: 0.5
     spawnChance: 0.25
     maxAlive: 5
-    currentInterval: 0
-    timer: 0
-  spawnDistanceFromCenter: 8
+  firstWaveDelay: 2
+  enemySpawnInterval: 0.45
+  intermissionDuration: 3
+  firstWaveSpawnDistance: 12
+  spawnDistanceDecreasePerWave: 0.75
+  minimumSpawnDistance: 7
+  ammoRewardPerWave: 5
+  drainHeatReductionPerWave: 30
+  waveRewardColor: {r: 0.7, g: 1, b: 1, a: 1}
+  waveRewardRingSegments: 40
+  waveRewardRingStartRadius: 0.55
+  waveRewardRingEndRadius: 2.3
+  waveRewardRingDuration: 0.45
+  waveRewardRingWidth: 0.055
+  ammoShardSpawnRadius: 2.15
+  ammoShardTravelSpeed: 6.5
+  ammoShardLifetime: 0.55
+  waveStatusText: {fileID: 0}
+  waveTitleCenterHoldDuration: 0.65
+  waveTitleMoveDuration: 0.55
+  waveTitleFontSize: 64
+  waveStatusFontSize: 24
+  waveStatusSortingOrder: 100
+  firstWaveZoomMultiplier: 0.4
+  firstWaveZoomInDuration: 0.55
 --- !u!4 &847903507
 Transform:
   m_ObjectHideFlags: 0
@@ -3733,6 +3764,37 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1052634422}
   m_CullTransparentMesh: 1
+--- !u!1 &1069985884
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1069985885}
+  m_Layer: 0
+  m_Name: WaveManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1069985885
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1069985884}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 2.46903, y: -2.13436, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1144568766
 GameObject:
   m_ObjectHideFlags: 0
@@ -8904,21 +8966,9 @@ MonoBehaviour:
           m_StringArgument: 
           m_BoolArgument: 0
         m_CallState: 2
-      - m_Target: {fileID: 847903506}
-        m_TargetAssemblyTypeName: EnemySpawner, Assembly-CSharp
-        m_MethodName: StartSpawning
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
       - m_Target: {fileID: 2120872779}
         m_TargetAssemblyTypeName: GameManager, Assembly-CSharp
-        m_MethodName: ResetGame
+        m_MethodName: RestartRun
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -10634,7 +10684,6 @@ RectTransform:
   - {fileID: 1816146897}
   - {fileID: 206929790}
   - {fileID: 1938614026}
-  - {fileID: 228060078}
   m_Father: {fileID: 232309500}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
@@ -21172,6 +21221,9 @@ MonoBehaviour:
   deathShakeDuration: 0.25
   deathShakeStrength: 0.18
   vibrateOnDeath: 1
+  drainHeatRewardColor: {r: 0.8, g: 1, b: 1, a: 1}
+  drainHeatSweepDuration: 0.35
+  drainHeatSweepWidth: 120
   drainGauge: 0
   overheated: 0
   currentEnergy: 0
@@ -21673,6 +21725,7 @@ MonoBehaviour:
   autoTargetMaxRange: 25
   recoilDistance: 0.08
   recoilDuration: 0.09
+  recoilSquashAmount: 0.16
   shootSound: {fileID: 0}
   shootVolume: 0.35
   shootPitchVariation: 0.06
@@ -31588,6 +31641,9 @@ MonoBehaviour:
   emptyShakeDistance: 14
   emptyShakeDuration: 0.16
   emptyAmmoColor: {r: 1, g: 0.3, b: 0.35, a: 1}
+  rewardPulseDuration: 0.28
+  rewardPulseScaleAmount: 0.28
+  rewardAmmoColor: {r: 0.7, g: 1, b: 1, a: 1}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -31603,3 +31659,4 @@ SceneRoots:
   - {fileID: 645647230}
   - {fileID: 1981140294}
   - {fileID: 1829791131}
+  - {fileID: 1069985885}
