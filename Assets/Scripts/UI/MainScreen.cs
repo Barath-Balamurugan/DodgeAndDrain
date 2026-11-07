@@ -14,16 +14,6 @@ using UnityEngine.UI;
 // use the screen's real edges, and shows / hides with StartScreen.
 public class MainScreen : MonoBehaviour
 {
-    [Header("Background")]
-    [SerializeField] private Color backgroundColor = new Color(0.055f, 0.055f, 0.06f, 1f);
-    [SerializeField] private Color glowColor = new Color(0.55f, 0.16f, 0.36f, 0.3f);
-    [Tooltip("Back layer: small, faint dots drifting slowly.")]
-    [SerializeField] private Color farDotColor = new Color(0.12f, 0.12f, 0.135f, 1f);
-    [Tooltip("Front layer: bigger, slightly brighter dots drifting faster.")]
-    [SerializeField] private Color nearDotColor = new Color(0.157f, 0.157f, 0.172f, 1f);
-    [Tooltip("Drift speed of the back / front dot layers, in UI units per second.")]
-    [SerializeField] private Vector2 dotDriftSpeed = new Vector2(12f, 32f);
-
     [Header("Tips")]
     [SerializeField, Min(0.5f)] private float secondsPerTip = 3f;
     [SerializeField] private string[] tips =
@@ -48,9 +38,6 @@ public class MainScreen : MonoBehaviour
 
     private RectTransform layout;
     private CanvasGroup layoutGroup;
-    private RawImage farDots;
-    private RawImage nearDots;
-    private Vector2 dotTiles;
 
     private RectTransform ring;
     private RectTransform orbGlow;
@@ -134,7 +121,8 @@ public class MainScreen : MonoBehaviour
             return;
 
         built = true;
-        BuildBackground(panel);
+        // Charcoal + drifting random dots + pink glow (shared with How to play).
+        ArenaBackdrop.AddTo(panel);
 
         // Old title goes; the new one lives in the layout.
         Transform oldTitle = panel.Find("Title");
@@ -163,43 +151,6 @@ public class MainScreen : MonoBehaviour
         layout.gameObject.SetActive(isActiveAndEnabled);
         RefreshBest(-1f, -1);
         RefreshToggles();
-    }
-
-    private void BuildBackground(Transform panel)
-    {
-        Image panelImage = panel.GetComponent<Image>();
-        if (panelImage != null)
-        {
-            panelImage.sprite = null;
-            panelImage.color = backgroundColor;
-        }
-
-        RectTransform panelRect = (RectTransform)panel;
-        dotTiles = panelRect.rect.size / NeonUI.ScatterTileSize;
-
-        // Two layers of randomly scattered dots: small faint ones behind,
-        // bigger brighter ones in front, drifting at different speeds.
-        farDots = AddDotLayer(panel, "FarDots", NeonUI.FarDots, farDotColor, 0);
-        nearDots = AddDotLayer(panel, "NearDots", NeonUI.NearDots, nearDotColor, 1);
-
-        Image glow = AddImage(panel, "PinkGlow", NeonUI.SoftDot, glowColor, new Vector2(0f, -40f), new Vector2(1700f, 1000f));
-        glow.transform.SetSiblingIndex(2);
-    }
-
-    private RawImage AddDotLayer(Transform panel, string name, Texture texture, Color color, int siblingIndex)
-    {
-        GameObject layerObject = new GameObject(name, typeof(RectTransform), typeof(RawImage));
-        RectTransform layerRect = layerObject.GetComponent<RectTransform>();
-        layerRect.SetParent(panel, false);
-        layerRect.SetSiblingIndex(siblingIndex);
-        Stretch(layerRect);
-
-        RawImage layer = layerObject.GetComponent<RawImage>();
-        layer.texture = texture;
-        layer.color = color;
-        layer.raycastTarget = false;
-        layer.uvRect = new Rect(0f, 0f, dotTiles.x, dotTiles.y);
-        return layer;
     }
 
     // The orb in its drain ring pulling in energy while two enemies circle.
@@ -385,13 +336,6 @@ public class MainScreen : MonoBehaviour
             layoutGroup.alpha = eased;
         if (titleRoot != null)
             titleRoot.anchoredPosition = new Vector2(0f, -150f + 24f * (1f - eased));
-
-        // Drift the dot layers (offsets in tiles; the front layer moves faster).
-        float tile = NeonUI.ScatterTileSize;
-        if (farDots != null)
-            farDots.uvRect = new Rect(time * dotDriftSpeed.x / tile, time * dotDriftSpeed.x * 0.5f / tile, dotTiles.x, dotTiles.y);
-        if (nearDots != null)
-            nearDots.uvRect = new Rect(time * dotDriftSpeed.y / tile, time * dotDriftSpeed.y * 0.5f / tile, dotTiles.x, dotTiles.y);
 
         if (ring != null)
             ring.localRotation = Quaternion.Euler(0f, 0f, -time * 36f);

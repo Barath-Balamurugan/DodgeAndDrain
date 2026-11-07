@@ -40,22 +40,68 @@ public static class MainScreenPreview
         RenderToFile(outPath, width, height);
     }
 
+    // How to play screen. Videos don't play in the editor, so pass still frames:
+    //   -executeMethod MainScreenPreview.RenderTutorial -previewOut out.png
+    //   -previewStills move.png,drain.png,shoot.png,heat.png [-previewBack true]
+    public static void RenderTutorial()
+    {
+        string outPath = GetArg("-previewOut") ?? "Temp/HowToPlayPreview.png";
+        string[] stillPaths = (GetArg("-previewStills") ?? string.Empty).Split(',');
+        bool withBack = (GetArg("-previewBack") ?? "true") == "true";
+
+        RenderScene(outPath, 1560, 720, () =>
+        {
+            // Load the stills after the scene opens (opening it unloads loose textures).
+            Texture[] stills = new Texture[stillPaths.Length];
+            for (int i = 0; i < stillPaths.Length; i++)
+            {
+                if (!File.Exists(stillPaths[i]))
+                    continue;
+                Texture2D still = new Texture2D(2, 2);
+                still.LoadImage(File.ReadAllBytes(stillPaths[i]));
+                stills[i] = still;
+            }
+
+            HowToPlayScreen screen = Object.FindFirstObjectByType<HowToPlayScreen>(FindObjectsInactive.Include);
+            if (screen == null)
+                return false;
+            screen.gameObject.SetActive(true);
+            screen.BuildForPreview(withBack, stills);
+            return true;
+        });
+    }
+
     private static string RenderToFile(string outPath, int width, int height)
+    {
+        return RenderScene(outPath, width, height, () =>
+        {
+            MainScreen mainScreen = Object.FindFirstObjectByType<MainScreen>(FindObjectsInactive.Include);
+            if (mainScreen == null)
+                return false;
+            mainScreen.BuildForPreview(326f, 7, 1.3f);
+            return true;
+        });
+    }
+
+    private static string RenderScene(string outPath, int width, int height, System.Func<bool> setup)
     {
         EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
 
-        MainScreen mainScreen = Object.FindFirstObjectByType<MainScreen>(FindObjectsInactive.Include);
         Camera camera = Camera.main;
-        if (mainScreen == null || camera == null)
+        if (camera == null)
         {
-            Debug.LogError("Main screen preview: MainScreen or Main Camera not found.");
+            Debug.LogError("Screen preview: Main Camera not found.");
             return null;
         }
 
         RenderTexture target = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32);
         camera.targetTexture = target;
 
-        mainScreen.BuildForPreview(326f, 7, 1.3f);
+        if (!setup())
+        {
+            Debug.LogError("Screen preview: screen component not found.");
+            return null;
+        }
 
         Canvas.ForceUpdateCanvases();
         foreach (TMP_Text text in Object.FindObjectsByType<TMP_Text>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))

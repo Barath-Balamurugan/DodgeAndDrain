@@ -20,7 +20,8 @@ public class InitialRun : MonoBehaviour
     {
         if (!PlayerPrefs.HasKey(FirstRunKey))
         {
-            // Show the tutorial panel
+            // Show the tutorial panel (first launch: PLAY only, no BACK)
+            SetTutorialBackVisible(false);
             tutorialPanel.SetActive(true);
             startPanel.SetActive(false);
 
@@ -42,8 +43,23 @@ public class InitialRun : MonoBehaviour
     // Its button starts the run, just like after the first-run tutorial.
     public void ShowTutorial()
     {
+        SetTutorialBackVisible(true);
         tutorialPanel.SetActive(true);
         startPanel.SetActive(false);
+    }
+
+    // BACK on How to play: return to the main screen without starting a run.
+    public void BackToMenu()
+    {
+        tutorialPanel.SetActive(false);
+        startPanel.SetActive(true);
+    }
+
+    private void SetTutorialBackVisible(bool visible)
+    {
+        HowToPlayScreen screen = tutorialPanel != null ? tutorialPanel.GetComponent<HowToPlayScreen>() : null;
+        if (screen != null)
+            screen.SetBackVisible(visible);
     }
 
     public void CloseTutorial()
