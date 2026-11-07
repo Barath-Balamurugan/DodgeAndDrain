@@ -72,8 +72,10 @@ public class EnemyShooter : EnemyBase
         }
 
         // Telegraph before each shot so players can recognise and dodge it.
+        // Only from on screen: with the follow camera, an off-screen shooter
+        // must come into view before it can open fire.
         fireTimer -= Time.deltaTime;
-        if (inRangeBand && fireTimer <= 0f)
+        if (inRangeBand && fireTimer <= 0f && CameraFollow.IsInView(transform.position, 0.5f))
         {
             isTelegraphingShot = true;
             fireTimer = shotTelegraphDuration;

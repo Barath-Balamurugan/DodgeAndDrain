@@ -528,12 +528,10 @@ public class GameManager : MonoBehaviour
             deathFlash.transform.SetAsLastSibling();
         }
 
-        Camera gameplayCamera = Camera.main;
-        if (gameplayCamera != null)
-        {
-            shakenCamera = gameplayCamera.transform;
-            cameraBaseLocalPosition = shakenCamera.localPosition;
-        }
+        // Render-only shake (GameFeedback) instead of moving the camera, so it
+        // can't fight the follow camera. Same peak strength, similar length.
+        if (GameFeedback.Instance != null)
+            GameFeedback.Instance.AddShake(deathShakeStrength / 0.45f);
 
         float totalDuration = Mathf.Max(deathFlashDuration, deathShakeDuration);
         float elapsed = 0f;
@@ -546,13 +544,6 @@ public class GameManager : MonoBehaviour
                     ? 1f
                     : Mathf.Clamp01(elapsed / deathFlashDuration);
                 deathFlash.color = new Color(1f, 0.25f, 0.35f, Mathf.Lerp(deathFlashOpacity, 0f, flashProgress));
-            }
-
-            if (shakenCamera != null && elapsed < deathShakeDuration)
-            {
-                float shakeFalloff = 1f - Mathf.Clamp01(elapsed / deathShakeDuration);
-                Vector2 offset = Random.insideUnitCircle * deathShakeStrength * shakeFalloff;
-                shakenCamera.localPosition = cameraBaseLocalPosition + new Vector3(offset.x, offset.y, 0f);
             }
 
             elapsed += Time.unscaledDeltaTime;
@@ -627,6 +618,10 @@ public class GameManager : MonoBehaviour
             if (playerShooter != null)
                 playerShooter.ResetForNewRun();
         }
+
+        // The player is back at the start; bring the follow camera with them.
+        if (CameraFollow.Instance != null)
+            CameraFollow.Instance.SnapToTarget();
 
         DrainZone drainZone = FindFirstObjectByType<DrainZone>();
         if (drainZone != null)

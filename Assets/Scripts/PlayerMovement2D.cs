@@ -35,6 +35,9 @@ public class PlayerMovement2D : MonoBehaviour
         rb = GetComponent<Rigidbody2D>();
         rb.gravityScale = 0f;
         rb.freezeRotation = true;
+        // The camera follows the player every frame, but physics moves it at a
+        // fixed rate; interpolation keeps the player smooth on screen.
+        rb.interpolation = RigidbodyInterpolation2D.Interpolate;
     }
 
     private void Start()
@@ -43,8 +46,17 @@ public class PlayerMovement2D : MonoBehaviour
         CachePlayerExtents();
     }
 
+    // The player's movement limits: the arena walls when there's an Arena (the
+    // camera follows), otherwise the camera view (fixed play field).
     private void UpdateCameraBounds()
     {
+        if (Arena.Instance != null)
+        {
+            minBounds = Arena.Instance.Min;
+            maxBounds = Arena.Instance.Max;
+            return;
+        }
+
         Camera cam = Camera.main;
         if (cam == null) return;
 

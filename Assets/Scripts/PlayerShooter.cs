@@ -409,19 +409,22 @@ public class PlayerShooter : MonoBehaviour
         return firePoint != null ? firePoint.position : transform.position;
     }
 
+    // Only enemies the player can see (on screen, or just poking in) are
+    // targets, so held fire never spends ammo on something off camera.
     private EnemyBase FindClosestEnemy(float maxRange, bool skipCoveredEnemies)
     {
-        EnemyBase[] all = FindObjectsByType<EnemyBase>(FindObjectsSortMode.None);
+        var all = EnemyBase.Active;
 
         EnemyBase best = null;
         float bestDistSq = maxRange * maxRange;
         Vector2 myPos = transform.position;
 
-        for (int i = 0; i < all.Length; i++)
+        for (int i = 0; i < all.Count; i++)
         {
             EnemyBase e = all[i];
             if (e == null) continue;
             if (skipCoveredEnemies && e.IsCoveredByIncomingShots) continue;
+            if (!CameraFollow.IsInView(e.transform.position, -0.5f)) continue;
 
             float d = ((Vector2)e.transform.position - myPos).sqrMagnitude;
             if (d < bestDistSq)

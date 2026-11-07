@@ -4,6 +4,11 @@ using UnityEngine;
 [RequireComponent(typeof(Collider2D))]
 public class EnemyBase : MonoBehaviour
 {
+    // Every enemy currently in play. Cheaper than searching the scene each
+    // frame (auto-aim, off-screen arrows).
+    private static readonly System.Collections.Generic.List<EnemyBase> active = new System.Collections.Generic.List<EnemyBase>();
+    public static System.Collections.Generic.IReadOnlyList<EnemyBase> Active => active;
+
     public float maxHealth = 20f;
     public float moveSpeed = 3f;
     public int scoreValue = 10;
@@ -44,9 +49,27 @@ public class EnemyBase : MonoBehaviour
         incomingDamage = Mathf.Max(0f, incomingDamage - amount);
     }
 
+    private SpriteRenderer rootRenderer;
+
+    // The enemy's base colour (the root renderer keeps it; the white hit flash
+    // only touches the visible child).
+    public Color IndicatorColor => rootRenderer != null ? rootRenderer.color : Color.white;
+
+    protected virtual void OnEnable()
+    {
+        if (!active.Contains(this))
+            active.Add(this);
+    }
+
+    protected virtual void OnDisable()
+    {
+        active.Remove(this);
+    }
+
     protected virtual void Awake()
     {
         currentHealth = maxHealth;
+        rootRenderer = GetComponent<SpriteRenderer>();
 
         drainLine = GetComponent<LineRenderer>();
         if (drainLine != null)

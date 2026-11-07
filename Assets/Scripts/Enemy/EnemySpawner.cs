@@ -76,7 +76,13 @@ public class EnemySpawner : MonoBehaviour
     [Tooltip("Breather before the interrupted wave replays after a revive.")]
     [SerializeField, Min(0f)] private float reviveRecoveryDelay = 2f;
 
-    [Header("Wave Spawn Distance")]
+    [Header("Wave Spawn Position")]
+    [Tooltip("Spawn enemies just outside the visible screen (inside the arena), so they enter from the edges and the off-screen arrows announce them. Off: spawn at the distances below around the player.")]
+    [SerializeField] private bool spawnOffScreen = true;
+    [Tooltip("How far past the screen edge enemies appear, in world units.")]
+    [SerializeField, Min(0f)] private float offScreenSpawnMargin = 2.5f;
+
+    [Header("Wave Spawn Distance (when not off screen, or no room off screen)")]
     [SerializeField, Min(0f)] private float firstWaveSpawnDistance = 12f;
     [SerializeField, Min(0f)] private float spawnDistanceDecreasePerWave = 0.75f;
     [SerializeField, Min(0f)] private float minimumSpawnDistance = 7f;
@@ -405,11 +411,65 @@ public class EnemySpawner : MonoBehaviour
         nextSpawnTimer = enemySpawnInterval;
     }
 
+    // A random point at the wave's spawn distance around the player, inside the
+    // arena walls. Near a wall, directions that land outside are re-rolled
+    // (clamping instead could drop an enemy right next to the player).
     private Vector3 GetSpawnPosition(Vector3 center)
     {
-        float angle = Random.Range(0f, Mathf.PI * 2f);
-        Vector3 offset = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f) * CurrentSpawnDistance();
-        return center + offset;
+        if (TryGetOffScreenSpawnPosition(center.z, out Vector3 offScreen))
+            return offScreen;
+
+        const float wallMargin = 1f;
+        float distance = CurrentSpawnDistance();
+        Arena arena = Arena.Instance;
+        Vector3 candidate = center;
+
+        for (int attempt = 0; attempt < 16; attempt++)
+        {
+            float angle = Random.Range(0f, Mathf.PI * 2f);
+            candidate = center + new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f) * distance;
+            if (arena == null || arena.Contains(candidate, wallMargin))
+                return candidate;
+        }
+
+        Vector2 clamped = arena.Clamp(candidate, wallMargin);
+        return new Vector3(clamped.x, clamped.y, candidate.z);
+    }
+
+    // A random point offScreenSpawnMargin past the edge of the current view, in
+    // a random direction from the screen centre, that is still inside the arena
+    // walls. When the camera is against a wall, that side has no room, so
+    // another direction is tried. False if there's no room anywhere.
+    private bool TryGetOffScreenSpawnPosition(float z, out Vector3 position)
+    {
+        position = Vector3.zero;
+        const float wallMargin = 1f;
+        Camera gameplayCamera = Camera.main;
+        Arena arena = Arena.Instance;
+        if (!spawnOffScreen || arena == null || gameplayCamera == null || !gameplayCamera.orthographic)
+            return false;
+
+        Vector2 cameraCenter = gameplayCamera.transform.position;
+        Vector2 halfView = new Vector2(gameplayCamera.orthographicSize * gameplayCamera.aspect, gameplayCamera.orthographicSize)
+            + Vector2.one * offScreenSpawnMargin;
+
+        for (int attempt = 0; attempt < 24; attempt++)
+        {
+            float angle = Random.Range(0f, Mathf.PI * 2f);
+            Vector2 direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+            float toEdge = Mathf.Min(
+                halfView.x / Mathf.Max(Mathf.Abs(direction.x), 0.0001f),
+                halfView.y / Mathf.Max(Mathf.Abs(direction.y), 0.0001f));
+            Vector2 point = cameraCenter + direction * toEdge;
+
+            if (arena.Contains(point, wallMargin))
+            {
+                position = new Vector3(point.x, point.y, z);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private float CurrentSpawnDistance()
@@ -607,9 +667,12 @@ public class EnemySpawner : MonoBehaviour
         powerUpCameraBasePosition = gameplayCamera.transform.position;
         powerUpCameraBaseSize = gameplayCamera.orthographicSize;
         Vector3 playerPosition = gameManager.player.transform.position;
-        powerUpCameraFocusedPosition = new Vector3(playerPosition.x, playerPosition.y, powerUpCameraBasePosition.z);
+        powerUpCameraFocusedPosition = ClampCameraToArena(
+            new Vector3(playerPosition.x, playerPosition.y, powerUpCameraBasePosition.z),
+            powerUpCameraBaseSize * powerUpZoomMultiplier);
         powerUpCameraState = PowerUpCameraState.ZoomingIn;
         powerUpCameraAnimationTimer = 0f;
+        SetCameraFollowHold("PowerUpZoom", true);
     }
 
     private void UpdatePowerUpCamera()
@@ -634,7 +697,7 @@ public class EnemySpawner : MonoBehaviour
 
         powerUpCamera.transform.position = zoomingIn
             ? Vector3.Lerp(powerUpCameraBasePosition, powerUpCameraFocusedPosition, easedProgress)
-            : Vector3.Lerp(powerUpCameraFocusedPosition, powerUpCameraBasePosition, easedProgress);
+            : Vector3.Lerp(powerUpCameraFocusedPosition, SettledCameraPosition(powerUpCameraBasePosition, powerUpCameraBaseSize), easedProgress);
         powerUpCamera.orthographicSize = zoomingIn
             ? Mathf.Lerp(powerUpCameraBaseSize, powerUpCameraBaseSize * powerUpZoomMultiplier, easedProgress)
             : Mathf.Lerp(powerUpCameraBaseSize * powerUpZoomMultiplier, powerUpCameraBaseSize, easedProgress);
@@ -671,13 +734,39 @@ public class EnemySpawner : MonoBehaviour
     {
         if (powerUpCamera != null)
         {
-            powerUpCamera.transform.position = powerUpCameraBasePosition;
+            powerUpCamera.transform.position = SettledCameraPosition(powerUpCameraBasePosition, powerUpCameraBaseSize);
             powerUpCamera.orthographicSize = powerUpCameraBaseSize;
         }
 
         powerUpCameraState = PowerUpCameraState.None;
         powerUpCameraAnimationTimer = 0f;
         powerUpCamera = null;
+        SetCameraFollowHold("PowerUpZoom", false);
+    }
+
+    // ---------- Follow camera helpers ----------
+
+    // Where the camera rests after a zoom: centred on the player and inside the
+    // arena, or the old fixed spot when there's no follow camera.
+    private static Vector3 SettledCameraPosition(Vector3 fallback, float orthoSize)
+    {
+        CameraFollow follow = CameraFollow.Instance;
+        GameManager gameManager = GameManager.Instance;
+        if (follow == null || gameManager == null || gameManager.player == null)
+            return fallback;
+
+        return follow.SettledPositionFor(gameManager.player.transform.position, orthoSize);
+    }
+
+    private static Vector3 ClampCameraToArena(Vector3 position, float orthoSize)
+    {
+        return CameraFollow.Instance != null ? CameraFollow.Instance.ClampToArena(position, orthoSize) : position;
+    }
+
+    private static void SetCameraFollowHold(string reason, bool held)
+    {
+        if (CameraFollow.Instance != null)
+            CameraFollow.Instance.SetHold(reason, held);
     }
 
     private void ResetPowerUpCamera()
@@ -1267,10 +1356,13 @@ public class EnemySpawner : MonoBehaviour
         firstWaveCameraBasePosition = gameplayCamera.transform.position;
         firstWaveCameraBaseSize = gameplayCamera.orthographicSize;
         Vector3 playerPosition = gameManager.player.transform.position;
-        firstWaveCameraFocusedPosition = new Vector3(playerPosition.x, playerPosition.y, firstWaveCameraBasePosition.z);
+        firstWaveCameraFocusedPosition = ClampCameraToArena(
+            new Vector3(playerPosition.x, playerPosition.y, firstWaveCameraBasePosition.z),
+            firstWaveCameraBaseSize * firstWaveZoomMultiplier);
         firstWaveCameraIntroActive = true;
         firstWaveCameraState = FirstWaveCameraState.ZoomingIn;
         firstWaveCameraAnimationTimer = 0f;
+        SetCameraFollowHold("FirstWaveIntro", true);
     }
 
     private void UpdateFirstWaveCameraIntro()
@@ -1291,7 +1383,7 @@ public class EnemySpawner : MonoBehaviour
         bool zoomingIn = firstWaveCameraState == FirstWaveCameraState.ZoomingIn;
         firstWaveCamera.transform.position = zoomingIn
             ? Vector3.Lerp(firstWaveCameraBasePosition, firstWaveCameraFocusedPosition, easedProgress)
-            : Vector3.Lerp(firstWaveCameraFocusedPosition, firstWaveCameraBasePosition, easedProgress);
+            : Vector3.Lerp(firstWaveCameraFocusedPosition, SettledCameraPosition(firstWaveCameraBasePosition, firstWaveCameraBaseSize), easedProgress);
         firstWaveCamera.orthographicSize = zoomingIn
             ? Mathf.Lerp(firstWaveCameraBaseSize, firstWaveCameraBaseSize * firstWaveZoomMultiplier, easedProgress)
             : Mathf.Lerp(firstWaveCameraBaseSize * firstWaveZoomMultiplier, firstWaveCameraBaseSize, easedProgress);
@@ -1326,7 +1418,7 @@ public class EnemySpawner : MonoBehaviour
 
         if (firstWaveCamera != null)
         {
-            firstWaveCamera.transform.position = firstWaveCameraBasePosition;
+            firstWaveCamera.transform.position = SettledCameraPosition(firstWaveCameraBasePosition, firstWaveCameraBaseSize);
             firstWaveCamera.orthographicSize = firstWaveCameraBaseSize;
         }
 
@@ -1334,6 +1426,7 @@ public class EnemySpawner : MonoBehaviour
         firstWaveCameraState = FirstWaveCameraState.None;
         firstWaveCameraAnimationTimer = 0f;
         firstWaveCamera = null;
+        SetCameraFollowHold("FirstWaveIntro", false);
     }
 
     private void ResetFirstWaveCameraIntro()

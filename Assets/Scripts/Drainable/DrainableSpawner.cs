@@ -28,10 +28,13 @@ public class DrainableSpawner : MonoBehaviour
     [Header("Spawn Types")]
     public SpawnOption[] spawnOptions;
 
-    [Header("Camera Bounds")]
+    [Header("Bounds")]
+    [Tooltip("Used for the play field only when the scene has no Arena.")]
     public Camera cam;
     public float margin = 0.5f;          // keep away from edges (world units)
     public float spawnZ = 0f;            // 2D usually 0
+    [Tooltip("With an Arena bigger than the screen: chance a drainable spawns inside the current view, so there's always something to drain nearby.")]
+    [Range(0f, 1f)] public float spawnInViewChance = 0.6f;
 
     [Header("State")]
     public bool startOnPlay = true;
@@ -93,14 +96,36 @@ public class DrainableSpawner : MonoBehaviour
         if (!hasCachedArenaBounds)
             CacheArenaBounds();
 
-        float x = Random.Range(arenaMin.x + margin, arenaMax.x - margin);
-        float y = Random.Range(arenaMin.y + margin, arenaMax.y - margin);
+        Vector2 min = (Vector2)arenaMin + Vector2.one * margin;
+        Vector2 max = (Vector2)arenaMax - Vector2.one * margin;
 
-        return new Vector3(x, y, spawnZ);
+        // In a big arena, favour the part the player can currently see.
+        if (Arena.Instance != null && cam != null && cam.orthographic && Random.value < spawnInViewChance)
+        {
+            Vector2 center = cam.transform.position;
+            Vector2 half = new Vector2(cam.orthographicSize * cam.aspect, cam.orthographicSize);
+            Vector2 viewMin = Vector2.Max(min, center - half + Vector2.one * margin);
+            Vector2 viewMax = Vector2.Min(max, center + half - Vector2.one * margin);
+            if (viewMin.x < viewMax.x && viewMin.y < viewMax.y)
+            {
+                min = viewMin;
+                max = viewMax;
+            }
+        }
+
+        return new Vector3(Random.Range(min.x, max.x), Random.Range(min.y, max.y), spawnZ);
     }
 
     private void CacheArenaBounds()
     {
+        if (Arena.Instance != null)
+        {
+            arenaMin = Arena.Instance.Min;
+            arenaMax = Arena.Instance.Max;
+            hasCachedArenaBounds = true;
+            return;
+        }
+
         if (cam == null)
             cam = Camera.main;
 
