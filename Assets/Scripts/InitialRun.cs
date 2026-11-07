@@ -38,6 +38,14 @@ public class InitialRun : MonoBehaviour
         }
     }
 
+    // "How to play" on the main screen: same panels as the first-run tutorial.
+    // Its button starts the run, just like after the first-run tutorial.
+    public void ShowTutorial()
+    {
+        tutorialPanel.SetActive(true);
+        startPanel.SetActive(false);
+    }
+
     public void CloseTutorial()
     {
         tutorialPanel.SetActive(false);

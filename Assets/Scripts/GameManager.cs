@@ -515,7 +515,7 @@ public class GameManager : MonoBehaviour
         deathFeedbackRoutine = StartCoroutine(PlayDeathFeedbackRoutine());
 
 #if UNITY_ANDROID || UNITY_IOS
-        if (vibrateOnDeath)
+        if (vibrateOnDeath && GameSettings.VibrationOn)
             Handheld.Vibrate();
 #endif
     }

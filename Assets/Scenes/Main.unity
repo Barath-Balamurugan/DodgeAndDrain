@@ -20752,6 +20752,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1982238485}
+  - component: {fileID: 1700000006}
   m_Layer: 5
   m_Name: StartScreen
   m_TagString: Untagged
@@ -31714,6 +31715,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e234631c3b6f4f198002d45a45b912b8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::OffscreenEnemyIndicators
+--- !u!114 &1700000006
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1982238484}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 90c8e8f7c7f449378424dc56cf5ca00e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MainScreen
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

@@ -334,6 +334,7 @@ public class EnemySpawner : MonoBehaviour
     private void BeginNextWave()
     {
         waveNumber++;
+        GameSettings.RecordWaveReached(waveNumber);
         BuildWaveQueue(waveNumber);
         waveState = WaveState.WaveIntro;
         waveIntroTimer = waveTitleCenterHoldDuration + waveTitleMoveDuration;

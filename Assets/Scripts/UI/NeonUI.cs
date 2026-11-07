@@ -18,6 +18,9 @@ public static class NeonUI
     private static Sprite softDot;
     private static Sprite circle;
     private static Sprite arc;
+    private static Sprite dashedRing;
+    private static Texture2D farDots;
+    private static Texture2D nearDots;
 
     private static readonly Dictionary<string, Material> glowMaterials = new Dictionary<string, Material>();
 
@@ -39,6 +42,16 @@ public static class NeonUI
 
     // A 70-degree glowing arc of a ring (centred at the top), for light trails.
     public static Sprite Arc => arc != null ? arc : (arc = MakeArc(256, 94f, 9f, 70f));
+
+    // Thin dashed circle (like the in-game drain ring).
+    public static Sprite DashedRing => dashedRing != null ? dashedRing : (dashedRing = MakeDashedRing(256, 120f, 3.5f, 30));
+
+    // Randomly scattered dots on a large repeating tile (1 px = 1 UI unit), for
+    // the main screen's two-layer drifting background. Dots wrap across the
+    // tile edges so the repeat is seamless.
+    public const int ScatterTileSize = 512;
+    public static Texture2D FarDots => farDots != null ? farDots : (farDots = MakeScatterTile("NeonFarDots", 24, 3.7f, 8.6f, 0.55f, 1f, 1234));
+    public static Texture2D NearDots => nearDots != null ? nearDots : (nearDots = MakeScatterTile("NeonNearDots", 11, 7.4f, 14.8f, 0.6f, 1f, 98765));
 
     // A copy of the font material with a soft coloured outline, which reads as
     // a neon glow. Outline and softness need no shader keywords, so this works
@@ -178,6 +191,74 @@ public static class NeonUI
         }
 
         return Finish(texture, pixels, Vector4.zero);
+    }
+
+    private static Sprite MakeDashedRing(int size, float radius, float thickness, int dashes)
+    {
+        Texture2D texture = NewTexture(size, size, "NeonDashedRing");
+        Color32[] pixels = new Color32[size * size];
+        float half = size * 0.5f;
+        float dashLength = 2f * Mathf.PI * radius / dashes;
+        const float duty = 0.5f;
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                Vector2 point = new Vector2(x + 0.5f - half, y + 0.5f - half);
+                float ring = Mathf.Clamp01(thickness * 0.5f - Mathf.Abs(point.magnitude - radius) + 0.5f);
+                float turns = (Mathf.Atan2(point.y, point.x) / (2f * Mathf.PI) + 1f) * dashes;
+                float fraction = turns - Mathf.Floor(turns);
+                float alongDash = Mathf.Min(fraction, duty - fraction) * dashLength;
+                float dash = fraction < duty ? Mathf.Clamp01(alongDash + 0.5f) : 0f;
+                pixels[y * size + x] = White(Mathf.Min(ring, dash));
+            }
+        }
+
+        return Finish(texture, pixels, Vector4.zero);
+    }
+
+    private static Texture2D MakeScatterTile(string name, int count, float minRadius, float maxRadius, float minAlpha, float maxAlpha, int seed)
+    {
+        int size = ScatterTileSize;
+        Texture2D texture = NewTexture(size, size, name);
+        texture.wrapMode = TextureWrapMode.Repeat;
+        float[] alpha = new float[size * size];
+        System.Random random = new System.Random(seed);
+
+        for (int dot = 0; dot < count; dot++)
+        {
+            float centerX = (float)random.NextDouble() * size;
+            float centerY = (float)random.NextDouble() * size;
+            float radius = Mathf.Lerp(minRadius, maxRadius, (float)random.NextDouble());
+            float strength = Mathf.Lerp(minAlpha, maxAlpha, (float)random.NextDouble());
+            int reach = Mathf.CeilToInt(radius + 1f);
+
+            // Draw with wrap-around so dots crossing an edge continue on the other side.
+            for (int dy = -reach; dy <= reach; dy++)
+            {
+                for (int dx = -reach; dx <= reach; dx++)
+                {
+                    int px = Mathf.FloorToInt(centerX) + dx;
+                    int py = Mathf.FloorToInt(centerY) + dy;
+                    float distance = new Vector2(px + 0.5f - centerX, py + 0.5f - centerY).magnitude;
+                    float value = Mathf.Clamp01(radius - distance + 0.5f) * strength;
+                    if (value <= 0f)
+                        continue;
+
+                    int index = ((py % size + size) % size) * size + ((px % size + size) % size);
+                    alpha[index] = Mathf.Max(alpha[index], value);
+                }
+            }
+        }
+
+        Color32[] pixels = new Color32[size * size];
+        for (int i = 0; i < pixels.Length; i++)
+            pixels[i] = White(alpha[i]);
+
+        texture.SetPixels32(pixels);
+        texture.Apply(false, true);
+        return texture;
     }
 
     // Signed distance to a rounded rectangle centred at the origin (negative inside).

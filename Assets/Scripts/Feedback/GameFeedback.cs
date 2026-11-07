@@ -425,7 +425,7 @@ public class GameFeedback : MonoBehaviour
 
     private void Haptic(long milliseconds, int amplitude)
     {
-        if (!haptics || Time.unscaledTime < nextHapticTime)
+        if (!haptics || !GameSettings.VibrationOn || Time.unscaledTime < nextHapticTime)
             return;
 
         nextHapticTime = Time.unscaledTime + hapticCooldown;
