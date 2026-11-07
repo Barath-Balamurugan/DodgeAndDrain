@@ -232,9 +232,13 @@ public class EnemyBase : MonoBehaviour
             drainLine.enabled = false;
         }
 
+        // Kill streak multiplies the points this kill is worth.
+        int streakMultiplier = KillStreak.Instance != null ? KillStreak.Instance.RegisterKill() : 1;
+        int points = scoreValue * streakMultiplier;
+
         if (GameManager.Instance != null)
         {
-            GameManager.Instance.AddScore(scoreValue);
+            GameManager.Instance.AddScore(points);
         }
 
         if (GameFeedback.Instance != null)
@@ -243,7 +247,7 @@ public class EnemyBase : MonoBehaviour
             // the enemy's base colour, unaffected by the white hit flash.
             SpriteRenderer baseRenderer = GetComponent<SpriteRenderer>();
             Color enemyColor = baseRenderer != null ? baseRenderer.color : Color.white;
-            GameFeedback.Instance.PlayEnemyKilled(transform.position, enemyColor, scoreValue, maxHealth, baseRenderer);
+            GameFeedback.Instance.PlayEnemyKilled(transform.position, enemyColor, points, maxHealth, baseRenderer, streakMultiplier);
         }
 
         Destroy(gameObject);

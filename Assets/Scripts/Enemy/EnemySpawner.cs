@@ -45,13 +45,25 @@ public class EnemySpawner : MonoBehaviour
         ZoomingOut
     }
 
-    private enum CommonPowerUp
+    private enum PowerUp
     {
+        // Common: stat boosts, stack with repeat picks.
         RapidFire,
         PowerRounds,
         KineticDrives,
-        ThermalVent
+        ThermalVent,
+
+        // Rare: change how you play, once per run.
+        TwinShot,
+        PiercingShot,
+        OverheatNova
     }
+
+    private static readonly PowerUp[] CommonPowerUps =
+        { PowerUp.RapidFire, PowerUp.PowerRounds, PowerUp.KineticDrives, PowerUp.ThermalVent };
+
+    private static readonly PowerUp[] RarePowerUps =
+        { PowerUp.TwinShot, PowerUp.PiercingShot, PowerUp.OverheatNova };
 
     [Header("Enemy Types")]
     public EnemyOption[] enemyOptions;
@@ -100,9 +112,10 @@ public class EnemySpawner : MonoBehaviour
     [SerializeField, Range(0.1f, 1f)] private float powerUpZoomMultiplier = 0.45f;
     [SerializeField, Min(0.01f)] private float powerUpZoomInDuration = 0.45f;
     [SerializeField, Min(0.01f)] private float powerUpZoomOutDuration = 0.45f;
-    [SerializeField] private Color commonCardColor = new Color(0.08f, 0.19f, 0.19f, 0.97f);
-    [SerializeField] private Color commonCardAccentColor = new Color(0.55f, 1f, 0.8f, 1f);
-    [SerializeField] private Color commonCardTextColor = new Color(0.9f, 1f, 0.96f, 1f);
+    [Tooltip("How long the chosen card stays lit (others dimmed) before the run resumes.")]
+    [SerializeField, Min(0f)] private float powerUpChoiceHoldDuration = 0.32f;
+    // 0.92 alpha in linear colour space looks like roughly a 70% dim.
+    [SerializeField] private Color powerUpBackdropColor = new Color(0f, 0f, 0f, 0.92f);
     // Buffs are > 1 (stacking multiplicatively per pick); Thermal Vent scales heat build-up, so it's < 1.
     // Power Rounds breakpoints at base damage 20: 1 pick -> shooters (45 HP) die in 2 shots,
     // 2 picks -> dashers (30 HP) die in 1. Chasers (20 HP) already die in 1.
@@ -110,6 +123,23 @@ public class EnemySpawner : MonoBehaviour
     [SerializeField, Range(1f, 2f)] private float powerRoundsMultiplier = 1.25f;
     [SerializeField, Range(1f, 2f)] private float kineticDrivesMultiplier = 1.15f;
     [SerializeField, Range(0.5f, 1f)] private float thermalVentMultiplier = 0.8f;
+
+    [Header("Rare Power-Up Cards")]
+    [Tooltip("First cleared wave after which a rare card can appear.")]
+    [SerializeField, Min(1)] private int rareMinimumWave = 2;
+    [Tooltip("Chance that one of the three cards is a rare.")]
+    [SerializeField, Range(0f, 1f)] private float rareOfferChance = 0.35f;
+    [Tooltip("Guarantee a rare after this many card picks without one.")]
+    [SerializeField, Min(1)] private int rarePityAfterPicks = 3;
+    [Tooltip("Piercing Shot: extra enemies each bullet passes through.")]
+    [SerializeField, Range(1, 5)] private int piercingExtraHits = 2;
+
+    private readonly HashSet<PowerUp> ownedRarePowerUps = new HashSet<PowerUp>();
+    private readonly Dictionary<PowerUp, int> commonPickCounts = new Dictionary<PowerUp, int>();
+    private int picksWithoutRare;
+    private readonly List<NeonPowerUpCard> powerUpCardViews = new List<NeonPowerUpCard>();
+    private bool powerUpChoiceLocked;
+    private Coroutine powerUpChoiceRoutine;
 
     private readonly List<EnemyBase> spawnQueue = new List<EnemyBase>();
     private readonly HashSet<EnemyBase> activeWaveEnemies = new HashSet<EnemyBase>();
@@ -144,7 +174,11 @@ public class EnemySpawner : MonoBehaviour
         // Power-up cards sort above the Game Over panel, so hide them while the
         // player is dead (they would cover Revive/Restart) and bring them back on revive.
         if (powerUpCardPanel != null && powerUpCardPanel.activeSelf == isGameOver)
+        {
             powerUpCardPanel.SetActive(!isGameOver);
+            if (gameManager != null)
+                gameManager.SetDrainGaugeVisible(isGameOver);
+        }
 
         // Restart and Menu reset the waves explicitly (StartSpawning / StopSpawning);
         // Revive resumes through OnPlayerRevived. Nothing to do while dead.
@@ -676,150 +710,162 @@ public class EnemySpawner : MonoBehaviour
         panelCanvas.overrideSorting = true;
         panelCanvas.sortingOrder = waveStatusSortingOrder + 100;
 
+        // Dark enough that the glowing cards pop and the HUD underneath recedes.
         Image panelBackground = powerUpCardPanel.GetComponent<Image>();
-        panelBackground.color = new Color(0.01f, 0.03f, 0.05f, 0.32f);
+        panelBackground.color = powerUpBackdropColor;
         panelBackground.raycastTarget = false;
 
-        CreatePowerUpLabel(textSource, powerUpCardPanel.transform, "CHOOSE A POWER-UP", 42f, Color.white, new Vector2(0f, 365f), new Vector2(1200f, 70f));
+        // Pink like the GAME OVER title, over a white heading.
+        TMP_Text cleared = CreatePowerUpLabel(textSource, powerUpCardPanel.transform, $"WAVE {waveNumber} CLEARED", 22f, ShootingCardColor,
+            new Vector2(0f, 395f), new Vector2(1200f, 40f));
+        cleared.fontSharedMaterial = NeonUI.GlowTextMaterial(textSource.fontSharedMaterial, new Color(1f, 0.3f, 0.46f, 0.5f), 0.1f, 0.28f);
+        cleared.characterSpacing = 12f;
 
-        List<CommonPowerUp> choices = BuildCommonPowerUpChoices();
+        TMP_Text title = CreatePowerUpLabel(textSource, powerUpCardPanel.transform, "CHOOSE A POWER-UP", 40f, new Color(0.95f, 0.95f, 0.95f, 1f),
+            new Vector2(0f, 348f), new Vector2(1200f, 64f));
+        title.fontSharedMaterial = NeonUI.GlowTextMaterial(textSource.fontSharedMaterial, new Color(1f, 1f, 1f, 0.22f), 0.1f, 0.28f);
+        title.characterSpacing = 10f;
+
+        powerUpCardViews.Clear();
+        powerUpChoiceLocked = false;
+
+        List<PowerUp> choices = BuildCommonPowerUpChoices();
         for (int index = 0; index < choices.Count; index++)
         {
-            CommonPowerUp choice = choices[index];
-            CreatePowerUpCard(textSource, powerUpCardPanel.transform, choice, (index - 1) * 420f);
+            PowerUp choice = choices[index];
+            int cardIndex = index;
+            float raise = IsRare(choice) ? 14f : 0f;
+            NeonPowerUpCard card = NeonPowerUpCard.Create(powerUpCardPanel.transform, textSource, BuildCardSpec(choice),
+                new Vector2((index - 1) * 420f, -10f + raise), index * 0.07f);
+            card.Button.onClick.AddListener(() => OnPowerUpCardTapped(cardIndex, choice));
+            powerUpCardViews.Add(card);
         }
+
+        // The heat gauge would sit right behind the header; it's back when the cards close.
+        gameManager.SetDrainGaugeVisible(false);
 
         powerUpCardsVisible = true;
         return true;
     }
 
-    private List<CommonPowerUp> BuildCommonPowerUpChoices()
+    // Light up the chosen card, dim the others, then apply it after a beat.
+    private void OnPowerUpCardTapped(int cardIndex, PowerUp powerUp)
     {
-        List<CommonPowerUp> choices = new List<CommonPowerUp>
-        {
-            CommonPowerUp.RapidFire,
-            CommonPowerUp.PowerRounds,
-            CommonPowerUp.KineticDrives,
-            CommonPowerUp.ThermalVent
-        };
+        if (powerUpChoiceLocked || !powerUpCardsVisible || waveState != WaveState.PowerUpSelection)
+            return;
 
-        for (int index = choices.Count - 1; index > 0; index--)
+        powerUpChoiceLocked = true;
+        for (int index = 0; index < powerUpCardViews.Count; index++)
         {
-            int randomIndex = Random.Range(0, index + 1);
-            CommonPowerUp temporary = choices[index];
-            choices[index] = choices[randomIndex];
-            choices[randomIndex] = temporary;
+            if (powerUpCardViews[index] == null)
+                continue;
+
+            if (index == cardIndex)
+                powerUpCardViews[index].SetChosen();
+            else
+                powerUpCardViews[index].SetDimmed();
         }
 
+        if (GameFeedback.Instance != null)
+            GameFeedback.Instance.PlayPowerUpSelected();
+
+        powerUpChoiceRoutine = StartCoroutine(FinishPowerUpChoice(powerUp));
+    }
+
+    private System.Collections.IEnumerator FinishPowerUpChoice(PowerUp powerUp)
+    {
+        yield return new WaitForSecondsRealtime(powerUpChoiceHoldDuration);
+        powerUpChoiceRoutine = null;
+
+        // Died during the beat (stray enemy shot): drop these cards; a fresh set
+        // is offered once the player is back.
+        if (GameManager.Instance != null && GameManager.Instance.IsGameOver)
+        {
+            HideCommonPowerUpCards();
+            yield break;
+        }
+
+        SelectCommonPowerUp(powerUp);
+    }
+
+    private NeonCardSpec BuildCardSpec(PowerUp powerUp)
+    {
+        bool rare = IsRare(powerUp);
+        int level = commonPickCounts.TryGetValue(powerUp, out int picks) ? picks : 0;
+
+        return new NeonCardSpec
+        {
+            title = GetPowerUpTitle(powerUp),
+            rare = rare,
+            accent = GetPowerUpColor(powerUp),
+            stat = rare ? null : GetPowerUpStat(powerUp),
+            statLabel = rare ? null : GetPowerUpStatLabel(powerUp),
+            description = rare ? GetPowerUpDescription(powerUp) : null,
+            footer = rare ? "NEW ABILITY" : $"<alpha=#80>LV {level}  >  <alpha=#FF>LV {level + 1}",
+            drawGlyph = (root, color) => DrawPowerUpGlyph(root, powerUp, color)
+        };
+    }
+
+    // Three different commons, and sometimes one of them swapped for a rare the
+    // player doesn't own yet (from rareMinimumWave on, with a pity guarantee).
+    private List<PowerUp> BuildCommonPowerUpChoices()
+    {
+        List<PowerUp> choices = new List<PowerUp>(CommonPowerUps);
+        Shuffle(choices);
         choices.RemoveRange(3, choices.Count - 3);
+
+        List<PowerUp> availableRares = new List<PowerUp>();
+        foreach (PowerUp rare in RarePowerUps)
+        {
+            if (!ownedRarePowerUps.Contains(rare))
+                availableRares.Add(rare);
+        }
+
+        bool offerRare = availableRares.Count > 0 &&
+            waveNumber >= rareMinimumWave &&
+            (picksWithoutRare >= rarePityAfterPicks || Random.value < rareOfferChance);
+
+        if (offerRare)
+        {
+            choices[Random.Range(0, choices.Count)] = availableRares[Random.Range(0, availableRares.Count)];
+            picksWithoutRare = 0;
+        }
+        else if (waveNumber >= rareMinimumWave && availableRares.Count > 0)
+        {
+            picksWithoutRare++;
+        }
+
         return choices;
     }
 
-    private void CreatePowerUpCard(TMP_Text textSource, Transform parent, CommonPowerUp powerUp, float xPosition)
+    private static void Shuffle(List<PowerUp> list)
     {
-        GameObject cardObject = new GameObject($"{powerUp}Card", typeof(RectTransform), typeof(Image), typeof(Button), typeof(Outline));
-        cardObject.transform.SetParent(parent, false);
-
-        RectTransform cardRect = cardObject.GetComponent<RectTransform>();
-        cardRect.anchorMin = new Vector2(0.5f, 0.5f);
-        cardRect.anchorMax = new Vector2(0.5f, 0.5f);
-        cardRect.pivot = new Vector2(0.5f, 0.5f);
-        cardRect.anchoredPosition = new Vector2(xPosition, -10f);
-        cardRect.sizeDelta = new Vector2(360f, 560f);
-
-        Image cardImage = cardObject.GetComponent<Image>();
-        cardImage.color = commonCardColor;
-        cardImage.raycastTarget = true;
-
-        Outline outline = cardObject.GetComponent<Outline>();
-        outline.effectColor = commonCardAccentColor;
-        outline.effectDistance = new Vector2(3f, -3f);
-
-        Button button = cardObject.GetComponent<Button>();
-        button.targetGraphic = cardImage;
-        ColorBlock buttonColors = button.colors;
-        buttonColors.normalColor = Color.white;
-        buttonColors.highlightedColor = new Color(1.12f, 1.12f, 1.12f, 1f);
-        buttonColors.pressedColor = new Color(0.75f, 0.92f, 0.85f, 1f);
-        buttonColors.selectedColor = buttonColors.highlightedColor;
-        button.colors = buttonColors;
-
-        CreatePowerUpBadge(textSource, cardObject.transform);
-        CreateIconDivider(cardObject.transform, new Vector2(0f, 176f), new Vector2(264f, 3f));
-        CreatePowerUpIcon(cardObject.transform, powerUp);
-        CreatePowerUpLabel(textSource, cardObject.transform, GetPowerUpTitle(powerUp), 30f, commonCardTextColor, new Vector2(0f, -32f), new Vector2(320f, 60f));
-        CreatePowerUpStatChip(textSource, cardObject.transform, GetPowerUpDescription(powerUp));
-        CreatePowerUpLabel(textSource, cardObject.transform, "TAP TO SELECT", 20f, commonCardAccentColor, new Vector2(0f, -226f), new Vector2(300f, 42f));
-
-        button.onClick.AddListener(() => SelectCommonPowerUp(powerUp));
+        for (int index = list.Count - 1; index > 0; index--)
+        {
+            int randomIndex = Random.Range(0, index + 1);
+            PowerUp temporary = list[index];
+            list[index] = list[randomIndex];
+            list[randomIndex] = temporary;
+        }
     }
 
-    private void CreatePowerUpBadge(TMP_Text textSource, Transform parent)
+    private static bool IsRare(PowerUp powerUp)
     {
-        RectTransform badgeRect = CreateCardElement(parent, "CommonBadge", new Vector2(0f, 220f), new Vector2(150f, 40f));
-        Image badgeImage = badgeRect.gameObject.AddComponent<Image>();
-        badgeImage.color = new Color(commonCardAccentColor.r, commonCardAccentColor.g, commonCardAccentColor.b, 0.16f);
-        badgeImage.raycastTarget = false;
-
-        Outline badgeOutline = badgeRect.gameObject.AddComponent<Outline>();
-        badgeOutline.effectColor = new Color(commonCardAccentColor.r, commonCardAccentColor.g, commonCardAccentColor.b, 0.7f);
-        badgeOutline.effectDistance = new Vector2(1.5f, -1.5f);
-
-        CreatePowerUpLabel(textSource, badgeRect, "COMMON", 19f, commonCardAccentColor, Vector2.zero, new Vector2(140f, 32f));
+        return System.Array.IndexOf(RarePowerUps, powerUp) >= 0;
     }
 
-    private void CreateIconDivider(Transform parent, Vector2 position, Vector2 size)
+    // The ability symbol, drawn in a 142 x 142 space (the card scales it onto its orb).
+    private void DrawPowerUpGlyph(RectTransform root, PowerUp powerUp, Color color)
     {
-        RectTransform divider = CreateCardElement(parent, "IconDivider", position, size);
-        Image dividerImage = divider.gameObject.AddComponent<Image>();
-        dividerImage.color = new Color(commonCardAccentColor.r, commonCardAccentColor.g, commonCardAccentColor.b, 0.48f);
-        dividerImage.raycastTarget = false;
-    }
-
-    private void CreatePowerUpStatChip(TMP_Text textSource, Transform parent, string text)
-    {
-        RectTransform chipRect = CreateCardElement(parent, "PowerUpStatChip", new Vector2(0f, -112f), new Vector2(304f, 64f));
-        Image chipImage = chipRect.gameObject.AddComponent<Image>();
-        chipImage.color = new Color(0f, 0f, 0f, 0.22f);
-        chipImage.raycastTarget = false;
-
-        Outline chipOutline = chipRect.gameObject.AddComponent<Outline>();
-        chipOutline.effectColor = new Color(commonCardAccentColor.r, commonCardAccentColor.g, commonCardAccentColor.b, 0.42f);
-        chipOutline.effectDistance = new Vector2(1.5f, -1.5f);
-
-        CreatePowerUpLabel(textSource, chipRect, text, 21f, Color.white, Vector2.zero, new Vector2(288f, 54f));
-    }
-
-    private void CreatePowerUpIcon(Transform parent, CommonPowerUp powerUp)
-    {
-        Color iconColor = GetPowerUpIconColor(powerUp);
-        RectTransform iconRoot = CreateCardElement(parent, $"{powerUp}Icon", new Vector2(0f, 78f), new Vector2(142f, 142f));
-
-        Image iconBackdrop = iconRoot.gameObject.AddComponent<Image>();
-        iconBackdrop.color = new Color(iconColor.r, iconColor.g, iconColor.b, 0.12f);
-        iconBackdrop.raycastTarget = false;
-
-        Outline iconOutline = iconRoot.gameObject.AddComponent<Outline>();
-        iconOutline.effectColor = new Color(iconColor.r, iconColor.g, iconColor.b, 0.62f);
-        iconOutline.effectDistance = new Vector2(2f, -2f);
-
         switch (powerUp)
         {
-            case CommonPowerUp.RapidFire:
-                CreateRapidFireIcon(iconRoot, iconColor);
-                break;
-
-            case CommonPowerUp.PowerRounds:
-                CreatePowerRoundsIcon(iconRoot, iconColor);
-                break;
-
-            case CommonPowerUp.KineticDrives:
-                CreateKineticDrivesIcon(iconRoot, iconColor);
-                break;
-
-            case CommonPowerUp.ThermalVent:
-                CreateThermalVentIcon(iconRoot, iconColor);
-                break;
+            case PowerUp.RapidFire: CreateRapidFireIcon(root, color); break;
+            case PowerUp.PowerRounds: CreatePowerRoundsIcon(root, color); break;
+            case PowerUp.KineticDrives: CreateKineticDrivesIcon(root, color); break;
+            case PowerUp.ThermalVent: CreateThermalVentIcon(root, color); break;
+            case PowerUp.TwinShot: CreateTwinShotIcon(root, color); break;
+            case PowerUp.PiercingShot: CreatePiercingShotIcon(root, color); break;
+            case PowerUp.OverheatNova: CreateOverheatNovaIcon(root, color); break;
         }
     }
 
@@ -867,6 +913,40 @@ public class EnemySpawner : MonoBehaviour
         }
     }
 
+    // Two bolts splitting apart from one origin.
+    private void CreateTwinShotIcon(Transform parent, Color color)
+    {
+        CreateIconShape(parent, "Origin", new Vector2(-44f, 0f), new Vector2(20f, 20f), color, 45f);
+        CreateIconShape(parent, "BoltUpperTrail", new Vector2(-4f, 17f), new Vector2(74f, 9f), color, 24f);
+        CreateIconShape(parent, "BoltUpperHead", new Vector2(36f, 35f), new Vector2(22f, 22f), color, 45f);
+        CreateIconShape(parent, "BoltLowerTrail", new Vector2(-4f, -17f), new Vector2(74f, 9f), color, -24f);
+        CreateIconShape(parent, "BoltLowerHead", new Vector2(36f, -35f), new Vector2(22f, 22f), color, 45f);
+    }
+
+    // A lance running straight through two targets.
+    private void CreatePiercingShotIcon(Transform parent, Color color)
+    {
+        Color target = new Color(color.r, color.g, color.b, 0.45f);
+        CreateIconShape(parent, "TargetNear", new Vector2(-14f, 0f), new Vector2(30f, 30f), target, 45f);
+        CreateIconShape(parent, "TargetFar", new Vector2(28f, 0f), new Vector2(30f, 30f), target, 45f);
+        CreateIconShape(parent, "Lance", new Vector2(-2f, 0f), new Vector2(112f, 8f), color, 0f);
+        CreateIconShape(parent, "LanceHead", new Vector2(54f, 0f), new Vector2(20f, 20f), color, 45f);
+    }
+
+    // A core with a dashed shockwave ring.
+    private void CreateOverheatNovaIcon(Transform parent, Color color)
+    {
+        CreateIconShape(parent, "NovaCore", Vector2.zero, new Vector2(30f, 30f), color, 45f);
+
+        const int segments = 12;
+        for (int index = 0; index < segments; index++)
+        {
+            float angle = index * 360f / segments;
+            Vector2 direction = new Vector2(Mathf.Cos(angle * Mathf.Deg2Rad), Mathf.Sin(angle * Mathf.Deg2Rad));
+            CreateIconShape(parent, $"Shockwave{index}", direction * 52f, new Vector2(20f, 7f), color, angle + 90f);
+        }
+    }
+
     private RectTransform CreateIconShape(Transform parent, string name, Vector2 position, Vector2 size, Color color, float rotation)
     {
         RectTransform shape = CreateCardElement(parent, name, position, size);
@@ -892,19 +972,52 @@ public class EnemySpawner : MonoBehaviour
         return rect;
     }
 
-    private Color GetPowerUpIconColor(CommonPowerUp powerUp)
+    // Card colour from the game's own palette, by what the power-up affects:
+    // pink like the fire button (shooting), cyan like the drain ring (drain and
+    // heat), white like the HUD and pills (movement).
+    private static readonly Color ShootingCardColor = new Color(1f, 0.3f, 0.46f);
+    private static readonly Color DrainCardColor = new Color(0.16f, 0.93f, 0.97f);
+    private static readonly Color MovementCardColor = new Color(0.95f, 0.95f, 0.95f);
+
+    private static Color GetPowerUpColor(PowerUp powerUp)
     {
         switch (powerUp)
         {
-            case CommonPowerUp.RapidFire: return new Color(0.35f, 0.92f, 1f);
-            case CommonPowerUp.PowerRounds: return new Color(1f, 0.68f, 0.35f);
-            case CommonPowerUp.KineticDrives: return new Color(0.74f, 1f, 0.42f);
-            case CommonPowerUp.ThermalVent: return new Color(0.7f, 0.8f, 1f);
-            default: return commonCardAccentColor;
+            case PowerUp.ThermalVent:
+            case PowerUp.OverheatNova:
+                return DrainCardColor;
+            case PowerUp.KineticDrives:
+                return MovementCardColor;
+            default:
+                return ShootingCardColor;
         }
     }
 
-    private void CreatePowerUpLabel(TMP_Text textSource, Transform parent, string text, float fontSize, Color color, Vector2 position, Vector2 size)
+    private string GetPowerUpStat(PowerUp powerUp)
+    {
+        switch (powerUp)
+        {
+            case PowerUp.RapidFire: return $"+{Mathf.RoundToInt((rapidFireMultiplier - 1f) * 100f)}%";
+            case PowerUp.PowerRounds: return $"+{Mathf.RoundToInt((powerRoundsMultiplier - 1f) * 100f)}%";
+            case PowerUp.KineticDrives: return $"+{Mathf.RoundToInt((kineticDrivesMultiplier - 1f) * 100f)}%";
+            case PowerUp.ThermalVent: return $"-{Mathf.RoundToInt((1f - thermalVentMultiplier) * 100f)}%";
+            default: return string.Empty;
+        }
+    }
+
+    private static string GetPowerUpStatLabel(PowerUp powerUp)
+    {
+        switch (powerUp)
+        {
+            case PowerUp.RapidFire: return "FIRE RATE";
+            case PowerUp.PowerRounds: return "BULLET DAMAGE";
+            case PowerUp.KineticDrives: return "MOVE SPEED";
+            case PowerUp.ThermalVent: return "DRAIN HEAT";
+            default: return string.Empty;
+        }
+    }
+
+    private TMP_Text CreatePowerUpLabel(TMP_Text textSource, Transform parent, string text, float fontSize, Color color, Vector2 position, Vector2 size)
     {
         TMP_Text label = Instantiate(textSource, parent, false);
         label.text = text;
@@ -922,24 +1035,28 @@ public class EnemySpawner : MonoBehaviour
         labelRect.pivot = new Vector2(0.5f, 0.5f);
         labelRect.anchoredPosition = position;
         labelRect.sizeDelta = size;
+        return label;
     }
 
-    private void SelectCommonPowerUp(CommonPowerUp powerUp)
+    // The tap already played the select sound (OnPowerUpCardTapped).
+    private void SelectCommonPowerUp(PowerUp powerUp)
     {
         if (!powerUpCardsVisible || waveState != WaveState.PowerUpSelection)
             return;
 
         ApplyCommonPowerUp(powerUp);
 
-        if (GameFeedback.Instance != null)
-            GameFeedback.Instance.PlayPowerUpSelected();
+        if (IsRare(powerUp))
+            ownedRarePowerUps.Add(powerUp);
+        else
+            commonPickCounts[powerUp] = (commonPickCounts.TryGetValue(powerUp, out int picks) ? picks : 0) + 1;
 
         HideCommonPowerUpCards();
         BeginPowerUpCameraZoomOut();
         waveState = WaveState.PowerUpOutro;
     }
 
-    private void ApplyCommonPowerUp(CommonPowerUp powerUp)
+    private void ApplyCommonPowerUp(PowerUp powerUp)
     {
         GameManager gameManager = GameManager.Instance;
         PlayerMovement2D player = gameManager != null ? gameManager.player : null;
@@ -947,24 +1064,39 @@ public class EnemySpawner : MonoBehaviour
 
         switch (powerUp)
         {
-            case CommonPowerUp.RapidFire:
+            case PowerUp.RapidFire:
                 if (shooter != null)
                     shooter.MultiplyFireRate(rapidFireMultiplier);
                 break;
 
-            case CommonPowerUp.PowerRounds:
+            case PowerUp.PowerRounds:
                 if (shooter != null)
                     shooter.MultiplyDamage(powerRoundsMultiplier);
                 break;
 
-            case CommonPowerUp.KineticDrives:
+            case PowerUp.KineticDrives:
                 if (player != null)
                     player.MultiplyMoveSpeed(kineticDrivesMultiplier);
                 break;
 
-            case CommonPowerUp.ThermalVent:
+            case PowerUp.ThermalVent:
                 if (gameManager != null)
                     gameManager.MultiplyDrainHeatBuildRate(thermalVentMultiplier);
+                break;
+
+            case PowerUp.TwinShot:
+                if (shooter != null)
+                    shooter.EnableTwinShot();
+                break;
+
+            case PowerUp.PiercingShot:
+                if (shooter != null)
+                    shooter.AddPierce(piercingExtraHits);
+                break;
+
+            case PowerUp.OverheatNova:
+                if (gameManager != null)
+                    gameManager.EnableOverheatNova();
                 break;
         }
     }
@@ -983,32 +1115,45 @@ public class EnemySpawner : MonoBehaviour
 
         if (gameManager != null)
             gameManager.ResetPowerUpModifiers();
+
+        ownedRarePowerUps.Clear();
+        commonPickCounts.Clear();
+        picksWithoutRare = 0;
     }
 
-    private string GetPowerUpTitle(CommonPowerUp powerUp)
+    private string GetPowerUpTitle(PowerUp powerUp)
     {
         switch (powerUp)
         {
-            case CommonPowerUp.RapidFire: return "RAPID FIRE";
-            case CommonPowerUp.PowerRounds: return "POWER ROUNDS";
-            case CommonPowerUp.KineticDrives: return "KINETIC DRIVES";
-            case CommonPowerUp.ThermalVent: return "THERMAL VENT";
+            case PowerUp.RapidFire: return "RAPID FIRE";
+            case PowerUp.PowerRounds: return "POWER ROUNDS";
+            case PowerUp.KineticDrives: return "KINETIC DRIVES";
+            case PowerUp.ThermalVent: return "THERMAL VENT";
+            case PowerUp.TwinShot: return "TWIN SHOT";
+            case PowerUp.PiercingShot: return "PIERCING SHOT";
+            case PowerUp.OverheatNova: return "OVERHEAT NOVA";
             default: return string.Empty;
         }
     }
 
-    private string GetPowerUpDescription(CommonPowerUp powerUp)
+    private string GetPowerUpDescription(PowerUp powerUp)
     {
         switch (powerUp)
         {
-            case CommonPowerUp.RapidFire:
+            case PowerUp.RapidFire:
                 return $"{Mathf.RoundToInt((rapidFireMultiplier - 1f) * 100f)}% FASTER SHOOTING";
-            case CommonPowerUp.PowerRounds:
+            case PowerUp.PowerRounds:
                 return $"{Mathf.RoundToInt((powerRoundsMultiplier - 1f) * 100f)}% MORE BULLET DAMAGE";
-            case CommonPowerUp.KineticDrives:
+            case PowerUp.KineticDrives:
                 return $"{Mathf.RoundToInt((kineticDrivesMultiplier - 1f) * 100f)}% MOVE SPEED";
-            case CommonPowerUp.ThermalVent:
+            case PowerUp.ThermalVent:
                 return $"{Mathf.RoundToInt((1f - thermalVentMultiplier) * 100f)}% LESS DRAIN HEAT";
+            case PowerUp.TwinShot:
+                return "EVERY SHOT FIRES A SECOND BULLET";
+            case PowerUp.PiercingShot:
+                return $"BULLETS PIERCE {piercingExtraHits} MORE ENEMIES";
+            case PowerUp.OverheatNova:
+                return "OVERHEATING BLASTS NEARBY ENEMIES";
             default:
                 return string.Empty;
         }
@@ -1016,11 +1161,21 @@ public class EnemySpawner : MonoBehaviour
 
     private void HideCommonPowerUpCards()
     {
+        if (powerUpChoiceRoutine != null)
+            StopCoroutine(powerUpChoiceRoutine);
+
+        powerUpChoiceRoutine = null;
+        powerUpChoiceLocked = false;
+        powerUpCardViews.Clear();
+
         if (powerUpCardPanel != null)
             Destroy(powerUpCardPanel);
 
         powerUpCardPanel = null;
         powerUpCardsVisible = false;
+
+        if (GameManager.Instance != null)
+            GameManager.Instance.SetDrainGaugeVisible(true);
     }
 
     private T GetEnemyPrefab<T>() where T : EnemyBase

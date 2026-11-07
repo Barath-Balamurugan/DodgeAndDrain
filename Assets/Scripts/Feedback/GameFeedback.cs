@@ -62,6 +62,8 @@ public class GameFeedback : MonoBehaviour
     private AudioClip waveClearClip;
     private AudioClip powerUpSelectedClip;
     private AudioClip lowAmmoClip;
+    private AudioClip streakUpClip;
+    private AudioClip novaClip;
     private AudioSource[] sfxSources;
     private AudioSource drainHumSource;
     private int nextSfxSource;
@@ -166,19 +168,22 @@ public class GameFeedback : MonoBehaviour
         PlaySound(hitClip, hitVolume, Random.Range(0.92f, 1.1f), 0.04f);
     }
 
-    public void PlayEnemyKilled(Vector3 position, Color color, int score, float maxHealth, SpriteRenderer source)
+    // score is the points actually awarded (already multiplied by the kill
+    // streak); a streak multiplier above 1 makes the popup bigger.
+    public void PlayEnemyKilled(Vector3 position, Color color, int score, float maxHealth, SpriteRenderer source, int streakMultiplier = 1)
     {
         EnsureEffects(source);
         position.z = 0f;
         float weight = Mathf.InverseLerp(LightEnemyHealth, HeavyEnemyHealth, maxHealth);
         float sizeScale = Mathf.Lerp(1f, 1.3f, weight);
+        float popupScale = Mathf.Lerp(1f, 1.35f, weight) * (1f + 0.15f * (Mathf.Max(1, streakMultiplier) - 1));
 
         EmitBurst(position, color,
             Mathf.RoundToInt(Mathf.Lerp(killParticleCount.x, killParticleCount.y, weight)),
             new Vector2(4f, 10f), new Vector2(0.15f, 0.35f) * sizeScale, 0.45f);
         SpawnRing(position, Color.Lerp(color, Color.white, 0.4f), 0.3f,
             Mathf.Lerp(killRingRadius.x, killRingRadius.y, weight), 0.28f, 0.1f);
-        SpawnPopup(position + Vector3.up * 0.5f, "+" + score, Color.Lerp(color, Color.white, 0.5f), Mathf.Lerp(1f, 1.35f, weight));
+        SpawnPopup(position + Vector3.up * 0.5f, "+" + score, Color.Lerp(color, Color.white, 0.5f), popupScale);
 
         PlaySound(killClip, killVolume, Mathf.Lerp(1.15f, 0.8f, weight) * Random.Range(0.95f, 1.05f), 0.03f);
         HitStop(Mathf.Lerp(killHitStopSeconds.x, killHitStopSeconds.y, weight));
@@ -227,6 +232,29 @@ public class GameFeedback : MonoBehaviour
     public void PlayLowAmmo()
     {
         PlaySound(lowAmmoClip, uiVolume, 1f, 0.5f);
+    }
+
+    // Kill streak reached a new multiplier tier (2 = x2, 3 = x3, ...).
+    public void PlayStreakUp(int multiplier)
+    {
+        PlaySound(streakUpClip, uiVolume, 1f + 0.12f * Mathf.Max(0, multiplier - 2));
+        Haptic(15, 90);
+    }
+
+    // Overheat Nova (rare power-up): a big shockwave centred on the player.
+    public void PlayNova(Vector3 position, float radius, Color color, SpriteRenderer source)
+    {
+        EnsureEffects(source);
+        position.z = 0f;
+
+        SpawnRing(position, color, 0.6f, radius, 0.42f, 0.22f);
+        SpawnRing(position, Color.Lerp(color, Color.white, 0.6f), 0.3f, radius * 0.65f, 0.3f, 0.1f);
+        EmitBurst(position, color, 48, new Vector2(10f, 22f), new Vector2(0.18f, 0.42f), 0.5f);
+
+        PlaySound(novaClip, overheatVolume);
+        HitStop(0.07f);
+        AddShake(0.7f);
+        Haptic(70, 255);
     }
 
     // ---------- Hit-stop ----------
@@ -325,6 +353,8 @@ public class GameFeedback : MonoBehaviour
         waveClearClip = FeedbackSounds.CreateWaveClear();
         powerUpSelectedClip = FeedbackSounds.CreatePowerUpSelected();
         lowAmmoClip = FeedbackSounds.CreateLowAmmo();
+        streakUpClip = FeedbackSounds.CreateStreakUp();
+        novaClip = FeedbackSounds.CreateNovaBlast();
 
         sfxSources = new AudioSource[SfxSourceCount];
         for (int i = 0; i < sfxSources.Length; i++)

@@ -41,6 +41,12 @@ public class GameManager : MonoBehaviour
     [SerializeField, Min(0.01f)] private float drainHeatSweepDuration = 0.35f;
     [SerializeField, Min(1f)] private float drainHeatSweepWidth = 120f;
 
+    [Header("Overheat Nova (rare power-up)")]
+    [SerializeField, Min(0.5f)] private float overheatNovaRadius = 6f;
+    [Tooltip("High enough to destroy every enemy type (shooters have 45 HP).")]
+    [SerializeField, Min(0f)] private float overheatNovaDamage = 100f;
+    [SerializeField] private Color overheatNovaColor = new Color(1f, 0.35f, 0.5f, 1f);
+
     [Header("Runtime (debug)")]
     public float drainGauge;
     public bool overheated;
@@ -57,6 +63,7 @@ public class GameManager : MonoBehaviour
     private Transform shakenCamera;
     private Vector3 cameraBaseLocalPosition;
     private float baseGaugeIncreasePerSecond;
+    private bool overheatNovaEnabled;
 
     public bool IsOverheated => overheated;
     public bool IsGameOver => isGameOver;
@@ -239,6 +246,9 @@ public class GameManager : MonoBehaviour
 
                 if (GameFeedback.Instance != null)
                     GameFeedback.Instance.PlayOverheat();
+
+                if (overheatNovaEnabled)
+                    TriggerOverheatNova();
             }
         }
         else
@@ -287,6 +297,53 @@ public class GameManager : MonoBehaviour
     public void ResetPowerUpModifiers()
     {
         gaugeIncreasePerSecond = baseGaugeIncreasePerSecond;
+        overheatNovaEnabled = false;
+    }
+
+    // Hides the heat gauge and its label, e.g. while the power-up cards cover the
+    // top of the screen (on phones wider than 16:9 they would overlap).
+    public void SetDrainGaugeVisible(bool visible)
+    {
+        if (drainGaugeFill == null)
+            return;
+
+        Transform gauge = drainGaugeFill.transform.parent;
+        GameObject target = gauge != null ? gauge.gameObject : drainGaugeFill.gameObject;
+        if (target.activeSelf != visible)
+            target.SetActive(visible);
+    }
+
+    // Rare power-up: overheating releases a shockwave around the player.
+    public void EnableOverheatNova()
+    {
+        overheatNovaEnabled = true;
+    }
+
+    private void TriggerOverheatNova()
+    {
+        if (player == null)
+            return;
+
+        Vector2 center = player.transform.position;
+        float radiusSq = overheatNovaRadius * overheatNovaRadius;
+
+        EnemyBase[] enemies = FindObjectsByType<EnemyBase>(FindObjectsSortMode.None);
+        foreach (EnemyBase enemy in enemies)
+        {
+            if (enemy != null && ((Vector2)enemy.transform.position - center).sqrMagnitude <= radiusSq)
+                enemy.TakeDamage(overheatNovaDamage);
+        }
+
+        // Also wipe enemy shots caught in the blast.
+        EnemyProjectile[] projectiles = FindObjectsByType<EnemyProjectile>(FindObjectsSortMode.None);
+        foreach (EnemyProjectile projectile in projectiles)
+        {
+            if (projectile != null && ((Vector2)projectile.transform.position - center).sqrMagnitude <= radiusSq)
+                Destroy(projectile.gameObject);
+        }
+
+        if (GameFeedback.Instance != null)
+            GameFeedback.Instance.PlayNova(center, overheatNovaRadius, overheatNovaColor, player.VisualRenderer);
     }
 
     public void PlayDrainHeatRewardFeedback()
@@ -377,6 +434,9 @@ public class GameManager : MonoBehaviour
     {
         if (isGameOver) return;
         isGameOver = true;
+
+        if (KillStreak.Instance != null)
+            KillStreak.Instance.ResetStreak();
 
         if (DrainableSpawner.Instance != null)
         {
@@ -518,6 +578,9 @@ public class GameManager : MonoBehaviour
 
     public void ResetGame()
     {
+        if (KillStreak.Instance != null)
+            KillStreak.Instance.ResetStreak();
+
         StopTransientFeedback();
         ResetCameraPosition();
         isGameOver = false;
@@ -574,6 +637,9 @@ public class GameManager : MonoBehaviour
     {
         if (!isGameOver)
             return;
+
+        if (KillStreak.Instance != null)
+            KillStreak.Instance.ResetStreak();
 
         StopTransientFeedback();
         ResetCameraPosition();

@@ -5,6 +5,9 @@ public class PlayerBullet : MonoBehaviour
     public float damage = 2f;
     public float lifeTime = 3f;
 
+    [Tooltip("Piercing Shot: how many more enemies this bullet passes through.")]
+    public int pierceRemaining;
+
     [Header("Projectile Trail")]
     [SerializeField, Min(0.01f)] private float trailDuration = 0.16f;
     [SerializeField, Min(0f)] private float trailStartWidth = 0.075f;
@@ -18,6 +21,7 @@ public class PlayerBullet : MonoBehaviour
 
     private EnemyBase reservedTarget;
     private float reservedDamage;
+    private System.Collections.Generic.HashSet<EnemyBase> piercedEnemies;
     private Vector2 reservationStart;
     private float reservationDistance;
 
@@ -93,10 +97,24 @@ public class PlayerBullet : MonoBehaviour
         EnemyBase enemy = other.GetComponent<EnemyBase>();
         if (enemy != null)
         {
+            // A piercing bullet can touch the same enemy's collider again; hit it once.
+            if (piercedEnemies != null && piercedEnemies.Contains(enemy))
+                return;
+
             enemy.PlayHitFeedback();
             CreateHitSparks(transform.position);
             ReleaseReservation();
             enemy.TakeDamage(damage);
+
+            if (pierceRemaining > 0)
+            {
+                pierceRemaining--;
+                if (piercedEnemies == null)
+                    piercedEnemies = new System.Collections.Generic.HashSet<EnemyBase>();
+                piercedEnemies.Add(enemy);
+                return;
+            }
+
             Destroy(gameObject);
         }
     }

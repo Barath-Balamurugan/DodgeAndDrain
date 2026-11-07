@@ -188,6 +188,37 @@ public static class FeedbackSounds
         return Build("FeedbackLowAmmo", samples);
     }
 
+    // Quick rising two-note chime when the kill-streak multiplier goes up.
+    // Played at a higher pitch for each tier.
+    public static AudioClip CreateStreakUp()
+    {
+        return BuildNotes("FeedbackStreakUp", 0.24f, new[] { 783.99f, 1174.66f }, 0.05f, 16f, 0.34f);
+    }
+
+    // Deep whoomp with a noisy tail for the Overheat Nova blast.
+    public static AudioClip CreateNovaBlast()
+    {
+        float[] samples = NewBuffer(0.7f);
+        System.Random random = new System.Random(71);
+        float phase = 0f;
+        float lowPassed = 0f;
+
+        for (int i = 0; i < samples.Length; i++)
+        {
+            float progress = i / (float)samples.Length;
+            phase += TwoPi * Mathf.Lerp(220f, 38f, Mathf.Sqrt(progress)) / SampleRate;
+            float attack = Mathf.Min(1f, progress / 0.01f);
+            float body = Soft(2.2f * Mathf.Sin(phase)) * Mathf.Pow(1f - progress, 1.6f);
+
+            lowPassed += (NextNoise(random) - lowPassed) * Mathf.Lerp(0.5f, 0.05f, progress);
+            float rumble = lowPassed * Mathf.Pow(1f - progress, 2.5f);
+
+            samples[i] = (body * 0.75f + rumble * 0.8f) * attack * 0.75f;
+        }
+
+        return Build("FeedbackNovaBlast", samples);
+    }
+
     private static AudioClip BuildNotes(string name, float duration, float[] frequencies, float noteSpacing, float decay, float volume)
     {
         float[] samples = NewBuffer(duration);

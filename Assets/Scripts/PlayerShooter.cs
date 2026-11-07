@@ -22,6 +22,10 @@ public class PlayerShooter : MonoBehaviour
     [Tooltip("While the Shoot button is held, keep firing every fireCooldown seconds.")]
     [SerializeField] private bool holdToFire = true;
 
+    [Header("Rare Power-Ups")]
+    [Tooltip("Twin Shot: when there's only one target, the second bullet fans out by this angle.")]
+    [SerializeField, Range(0f, 20f)] private float twinShotFanDegrees = 4f;
+
     [Header("Recoil Kick")]
     [SerializeField, Min(0f)] private float recoilDistance = 0.16f;
     [SerializeField, Min(0.01f)] private float recoilDuration = 0.13f;
@@ -51,6 +55,8 @@ public class PlayerShooter : MonoBehaviour
     private Vector3 recoilVisualRestPosition;
     private Vector3 recoilVisualRestScale;
     private bool hasRecoilVisualRestTransform;
+    private bool twinShot;
+    private int pierceHits;
 
     private void Awake()
     {
@@ -87,10 +93,25 @@ public class PlayerShooter : MonoBehaviour
             baseDamage *= multiplier;
     }
 
+    // Rare power-up: every trigger also fires a second bullet (no extra ammo).
+    public void EnableTwinShot()
+    {
+        twinShot = true;
+    }
+
+    // Rare power-up: bullets carry on through this many more enemies.
+    public void AddPierce(int extraHits)
+    {
+        if (extraHits > 0)
+            pierceHits += extraHits;
+    }
+
     public void ResetPowerUpModifiers()
     {
         fireCooldown = initialFireCooldown;
         baseDamage = initialDamage;
+        twinShot = false;
+        pierceHits = 0;
     }
 
     public void ResetForNewRun()
@@ -180,11 +201,35 @@ public class PlayerShooter : MonoBehaviour
             ? ((Vector2)target.transform.position - (Vector2)GetFirePos()).normalized
             : Vector2.up;
 
-        FireProjectile(dir, target);
+        FireProjectile(dir, target, true);
+
+        if (twinShot)
+            FireTwinShot(dir, target);
+
         bulletCooldownTimer = fireCooldown;
     }
 
-    private void FireProjectile(Vector2 dir, EnemyBase target)
+    // Second bullet goes to the next enemy that still needs damage; with a
+    // single target it fans out slightly at the same enemy instead.
+    private void FireTwinShot(Vector2 firstDirection, EnemyBase firstTarget)
+    {
+        EnemyBase secondTarget = FindClosestEnemy(autoTargetMaxRange, true);
+        Vector2 secondDirection;
+
+        if (secondTarget != null && secondTarget != firstTarget)
+        {
+            secondDirection = ((Vector2)secondTarget.transform.position - (Vector2)GetFirePos()).normalized;
+        }
+        else
+        {
+            secondTarget = firstTarget;
+            secondDirection = Quaternion.Euler(0f, 0f, twinShotFanDegrees) * firstDirection;
+        }
+
+        FireProjectile(secondDirection, secondTarget, false);
+    }
+
+    private void FireProjectile(Vector2 dir, EnemyBase target, bool playEffects)
     {
         Vector3 spawnPos = GetFirePos();
         GameObject b = Instantiate(bulletPrefab, spawnPos, Quaternion.identity);
@@ -193,6 +238,7 @@ public class PlayerShooter : MonoBehaviour
         if (pb != null)
         {
             pb.damage = baseDamage;
+            pb.pierceRemaining = pierceHits;
             pb.ReserveDamageOn(target);
         }
 
@@ -202,6 +248,9 @@ public class PlayerShooter : MonoBehaviour
             rb.gravityScale = 0f;
             rb.linearVelocity = dir.normalized * bulletSpeed; // ✅ compatibility
         }
+
+        if (!playEffects)
+            return;
 
         PlayRecoilKick(dir);
         PlayShootSound();
