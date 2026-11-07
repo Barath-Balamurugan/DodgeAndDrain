@@ -127,7 +127,7 @@ public class DrainableSpawner : MonoBehaviour
     {
         // Lightweight approach: count by name. For most games this is fine.
         // If you need exact counts even when renaming, add a tag or marker component instead.
-        GameObject[] all = GameObject.FindObjectsOfType<GameObject>();
+        GameObject[] all = FindObjectsByType<GameObject>(FindObjectsSortMode.None);
         int count = 0;
 
         string prefabName = prefab.name;
@@ -167,7 +167,7 @@ public class DrainableSpawner : MonoBehaviour
         AreDrainablesPaused = false;
         ResetSpawnTimers();
 
-        DrainableBase[] drainables = FindObjectsOfType<DrainableBase>();
+        DrainableBase[] drainables = FindObjectsByType<DrainableBase>(FindObjectsSortMode.None);
         foreach (DrainableBase drainable in drainables)
         {
             if (drainable != null)

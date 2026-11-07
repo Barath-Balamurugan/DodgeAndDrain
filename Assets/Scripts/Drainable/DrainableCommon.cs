@@ -2,7 +2,7 @@ using UnityEngine;
 
 public class DrainableCommon : DrainableBase
 {
-    public float moveSpeed = 2f;
+    // Movement speed is DrainableBase.moveSpeed (one Inspector field).
     public float directionChangeInterval = 2.5f;
     public float boundsPadding = 0.5f; // keep away from exact edges
 
@@ -22,7 +22,7 @@ public class DrainableCommon : DrainableBase
         dirTimer = directionChangeInterval;
     }
 
-    void Update()
+    protected override void Update()
     {
         base.Update();
         if (cam == null) return;

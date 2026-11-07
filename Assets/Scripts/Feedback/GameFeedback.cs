@@ -583,7 +583,7 @@ public class GameFeedback : MonoBehaviour
         text.fontSize = scorePopupFontSize;
         text.fontStyle = FontStyles.Bold;
         text.alignment = TextAlignmentOptions.Center;
-        text.enableWordWrapping = false;
+        text.textWrappingMode = TextWrappingModes.NoWrap;
         text.raycastTarget = false;
         text.rectTransform.sizeDelta = new Vector2(6f, 2f);
         text.sortingLayerID = effectsSortingLayer;

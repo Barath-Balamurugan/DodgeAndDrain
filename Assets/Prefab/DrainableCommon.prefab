@@ -175,7 +175,6 @@ MonoBehaviour:
   scoreValue: 1
   minScaleFactor: 0.3
   isBeingDrained: 0
-  moveSpeed: 0.5
   directionChangeInterval: 10
   boundsPadding: 0.5
 --- !u!120 &4158369707748377675

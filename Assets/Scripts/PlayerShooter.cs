@@ -362,7 +362,7 @@ public class PlayerShooter : MonoBehaviour
 
     private EnemyBase FindClosestEnemy(float maxRange, bool skipCoveredEnemies)
     {
-        EnemyBase[] all = FindObjectsOfType<EnemyBase>();
+        EnemyBase[] all = FindObjectsByType<EnemyBase>(FindObjectsSortMode.None);
 
         EnemyBase best = null;
         float bestDistSq = maxRange * maxRange;

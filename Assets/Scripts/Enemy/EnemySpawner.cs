@@ -59,7 +59,8 @@ public class EnemySpawner : MonoBehaviour
     [Header("Wave Timing")]
     [SerializeField, Min(0f)] private float firstWaveDelay = 3f;
     [SerializeField, Min(0.05f)] private float enemySpawnInterval = 0.45f;
-    [SerializeField, Min(0f)] private float intermissionDuration = 3f;
+    // No between-wave intermission setting: the power-up card selection is the
+    // breather, and the next wave's title intro plays before spawning starts.
     [Tooltip("Breather before the interrupted wave replays after a revive.")]
     [SerializeField, Min(0f)] private float reviveRecoveryDelay = 2f;
 
@@ -911,7 +912,7 @@ public class EnemySpawner : MonoBehaviour
         label.fontSize = fontSize;
         label.color = color;
         label.margin = Vector4.zero;
-        label.enableWordWrapping = true;
+        label.textWrappingMode = TextWrappingModes.Normal;
         label.overflowMode = TextOverflowModes.Overflow;
         label.raycastTarget = false;
 
@@ -1052,7 +1053,7 @@ public class EnemySpawner : MonoBehaviour
         waveStatusText.alignment = TextAlignmentOptions.Center;
         waveStatusText.color = new Color(0.8f, 0.95f, 1f);
         waveStatusText.margin = Vector4.zero;
-        waveStatusText.enableWordWrapping = false;
+        waveStatusText.textWrappingMode = TextWrappingModes.NoWrap;
         waveStatusText.overflowMode = TextOverflowModes.Overflow;
         waveStatusText.raycastTarget = false;
 

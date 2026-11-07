@@ -114,7 +114,7 @@ public class GameManager : MonoBehaviour
         drainHeatText.fontSize = 20f;
         drainHeatText.color = drainCoolColor;
         drainHeatText.margin = Vector4.zero;
-        drainHeatText.enableWordWrapping = false;
+        drainHeatText.textWrappingMode = TextWrappingModes.NoWrap;
         drainHeatText.overflowMode = TextOverflowModes.Overflow;
         drainHeatText.raycastTarget = false;
 
@@ -185,7 +185,7 @@ public class GameManager : MonoBehaviour
             label.color = color;
             label.raycastTarget = false;
             label.margin = Vector4.zero;
-            label.enableWordWrapping = false;
+            label.textWrappingMode = TextWrappingModes.NoWrap;
             label.overflowMode = TextOverflowModes.Overflow;
 
             RectTransform rect = label.rectTransform;
@@ -545,7 +545,7 @@ public class GameManager : MonoBehaviour
     {
         ResetGame();
 
-        EnemySpawner enemySpawner = FindObjectOfType<EnemySpawner>();
+        EnemySpawner enemySpawner = FindFirstObjectByType<EnemySpawner>();
         if (enemySpawner != null)
             enemySpawner.StartSpawning();
     }
@@ -565,7 +565,7 @@ public class GameManager : MonoBehaviour
                 playerShooter.ResetForNewRun();
         }
 
-        DrainZone drainZone = FindObjectOfType<DrainZone>();
+        DrainZone drainZone = FindFirstObjectByType<DrainZone>();
         if (drainZone != null)
             drainZone.ResetForNewRun();
     }
@@ -598,7 +598,7 @@ public class GameManager : MonoBehaviour
         DestroyAllProjectiles();
 
         // GameOver froze the drainables; the wave system decides how the run resumes.
-        EnemySpawner enemySpawner = FindObjectOfType<EnemySpawner>();
+        EnemySpawner enemySpawner = FindFirstObjectByType<EnemySpawner>();
         if (enemySpawner != null)
             enemySpawner.OnPlayerRevived();
         else if (DrainableSpawner.Instance != null)
@@ -607,7 +607,7 @@ public class GameManager : MonoBehaviour
 
     public void DestroyAllEnemies()
     {
-        EnemyBase[] enemies = FindObjectsOfType<EnemyBase>();
+        EnemyBase[] enemies = FindObjectsByType<EnemyBase>(FindObjectsSortMode.None);
         foreach (EnemyBase enemy in enemies)
         {
             Destroy(enemy.gameObject);
@@ -616,14 +616,14 @@ public class GameManager : MonoBehaviour
 
     private void DestroyAllProjectiles()
     {
-        PlayerBullet[] bullets = FindObjectsOfType<PlayerBullet>();
+        PlayerBullet[] bullets = FindObjectsByType<PlayerBullet>(FindObjectsSortMode.None);
         foreach (PlayerBullet bullet in bullets)
         {
             if (bullet != null)
                 Destroy(bullet.gameObject);
         }
 
-        EnemyProjectile[] enemyProjectiles = FindObjectsOfType<EnemyProjectile>();
+        EnemyProjectile[] enemyProjectiles = FindObjectsByType<EnemyProjectile>(FindObjectsSortMode.None);
         foreach (EnemyProjectile projectile in enemyProjectiles)
         {
             if (projectile != null)
