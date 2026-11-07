@@ -7,7 +7,7 @@ public static class AndroidReleaseBuilder
 {
     public static void BuildNoAdsBundle()
     {
-        const string outputPath = "Builds/DrainRun-noads-v1.aab";
+        string outputPath = $"Builds/DrainRun-noads-v{PlayerSettings.Android.bundleVersionCode}.aab";
 
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
 

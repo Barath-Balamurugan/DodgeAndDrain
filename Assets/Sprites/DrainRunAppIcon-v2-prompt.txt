@@ -1,0 +1,5 @@
+Drain Run app icon — generated with the built-in image-generation tool.
+
+Prompt: A premium square mobile-game icon on full-bleed near-black navy. A dominant luminous cyan circular player with a pale cyan rim and broken drain orbit absorbs energy from a small lime diamond. Three bold magenta projectile threats approach around it. Clean geometric arcade illustration, strong small-size silhouettes, restrained glow, no text or baked rounded corners.
+
+Source context: local Unity project version 1.7, Android version code 7. GitHub origin/main was fetched and had no newer commits than the local checkout.

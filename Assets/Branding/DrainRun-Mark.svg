@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 1024 1024">
+  <title>Drain Run standalone mark</title>
+  <path d="M 638 294 A 252 252 0 1 0 730 386" fill="none" stroke="#38E4DB" stroke-width="72" stroke-linecap="butt"/>
+  <circle cx="512" cy="512" r="100" fill="#38E4DB"/>
+  <path d="M 690 230 L 764 304 L 690 378 L 616 304 Z" fill="#FF547D"/>
+</svg>
