@@ -71,6 +71,52 @@ public static class MainScreenPreview
         });
     }
 
+    // Game Over screen with sample results:
+    //   -executeMethod MainScreenPreview.RenderGameOver -previewOut out.png
+    //   [-previewRevive true|false] [-previewNewBest true|false] [-previewSize 1920x1080]
+    public static void RenderGameOver()
+    {
+        string outPath = GetArg("-previewOut") ?? "Temp/GameOverPreview.png";
+        bool canRevive = (GetArg("-previewRevive") ?? "true") == "true";
+        bool newBest = (GetArg("-previewNewBest") ?? "true") == "true";
+        int width = 1560, height = 720;
+        string size = GetArg("-previewSize");
+        if (size != null)
+        {
+            string[] parts = size.ToLowerInvariant().Split('x');
+            width = int.Parse(parts[0]);
+            height = int.Parse(parts[1]);
+        }
+
+        RenderScene(outPath, width, height, () =>
+        {
+            GameManager gameManager = Object.FindFirstObjectByType<GameManager>(FindObjectsInactive.Include);
+            if (gameManager == null || gameManager.gameOverPanel == null)
+                return false;
+
+            // Only the Game Over screen over the arena, as in play.
+            MainScreen mainScreen = Object.FindFirstObjectByType<MainScreen>(FindObjectsInactive.Include);
+            if (mainScreen != null)
+                mainScreen.gameObject.SetActive(false);
+
+            gameManager.gameOverPanel.SetActive(true);
+            GameOverScreen screen = GameOverScreen.AttachTo(gameManager.gameOverPanel);
+            screen.Show(new GameOverResult
+            {
+                score = 412,
+                bestScore = newBest ? 412 : 512,
+                newBest = newBest,
+                wave = 4,
+                kills = 37,
+                bestMultiplier = 3,
+                seconds = 134f,
+                tip = GameOverScreen.TipFor(DeathCause.Unknown, true, false),
+                canRevive = canRevive
+            }, skipEntrance: true);
+            return true;
+        });
+    }
+
     private static string RenderToFile(string outPath, int width, int height)
     {
         return RenderScene(outPath, width, height, () =>

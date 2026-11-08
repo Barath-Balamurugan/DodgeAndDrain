@@ -28,7 +28,7 @@ public class EnemyProjectile : MonoBehaviour
 
         if (other.GetComponent<PlayerMovement2D>() != null)
         {
-            GameManager.Instance.GameOver();
+            GameManager.Instance.GameOver(DeathCause.EnemyShot);
             Destroy(gameObject);
         }
     }

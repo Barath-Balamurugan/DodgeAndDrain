@@ -6,6 +6,7 @@ using UnityEditor.Build.Reporting;
 // Builds a debug-signed APK for installing straight onto a test phone over USB
 // (adb install), without needing the upload keystore's password.
 // Store builds still go through AndroidReleaseBuilder and stay keystore-signed.
+// Device builds also play a placeholder in place of rewarded ads (store builds don't).
 //
 // Command line:
 //   Unity -batchmode -quit -projectPath . -buildTarget Android \
@@ -28,12 +29,17 @@ public static class AndroidDeviceBuilder
             EditorUserBuildSettings.buildAppBundle = false;
             PlayerSettings.Android.useCustomKeystore = false;
 
-            BuildReport report = BuildPipeline.BuildPlayer(
-                new[] { "Assets/Scenes/Main.unity" },
-                OutputPath,
-                BuildTarget.Android,
-                BuildOptions.None
-            );
+            BuildReport report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+            {
+                scenes = new[] { "Assets/Scenes/Main.unity" },
+                locationPathName = OutputPath,
+                target = BuildTarget.Android,
+                targetGroup = BuildTargetGroup.Android,
+                options = BuildOptions.None,
+                // Test builds only: a placeholder stands in for rewarded ads so
+                // Revive can be tried before an ad SDK is added (see RewardedAds).
+                extraScriptingDefines = new[] { "DRAINRUN_TEST_ADS" }
+            });
 
             if (report.summary.result != BuildResult.Succeeded)
                 throw new Exception($"Device APK build failed: {report.summary.result}");

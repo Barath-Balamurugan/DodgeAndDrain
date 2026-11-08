@@ -257,6 +257,7 @@ public class EnemyBase : MonoBehaviour
 
         // Kill streak multiplies the points this kill is worth.
         int streakMultiplier = KillStreak.Instance != null ? KillStreak.Instance.RegisterKill() : 1;
+        RunStats.RecordKill(streakMultiplier);
         int points = scoreValue * streakMultiplier;
 
         if (GameManager.Instance != null)
@@ -289,7 +290,10 @@ public class EnemyBase : MonoBehaviour
         PlayerMovement2D player = collision.collider.GetComponent<PlayerMovement2D>();
         if (player != null)
         {
-            GameManager.Instance.GameOver();
+            DeathCause cause = this is EnemyDasher ? DeathCause.Dasher
+                : this is EnemyShooter ? DeathCause.Shooter
+                : DeathCause.Chaser;
+            GameManager.Instance.GameOver(cause);
         }
     }
 }

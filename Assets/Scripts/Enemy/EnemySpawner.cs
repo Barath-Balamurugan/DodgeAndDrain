@@ -153,6 +153,9 @@ public class EnemySpawner : MonoBehaviour
     private WaveState waveState = WaveState.Idle;
     private bool gameStarted;
     private int waveNumber;
+
+    // The wave in progress (or last reached), for the Game Over screen.
+    public int CurrentWave => waveNumber;
     private float nextSpawnTimer;
     private float intermissionTimer;
     private float waveIntroTimer;
@@ -187,12 +190,19 @@ public class EnemySpawner : MonoBehaviour
         }
 
         // Restart and Menu reset the waves explicitly (StartSpawning / StopSpawning);
-        // Revive resumes through OnPlayerRevived. Nothing to do while dead.
+        // Revive resumes through OnPlayerRevived. Nothing to do while dead, except
+        // clearing the wave status so it can't show through the Game Over screen.
         if (isGameOver)
+        {
+            if (waveStatusText != null && waveStatusText.text.Length > 0)
+                waveStatusText.text = string.Empty;
             return;
+        }
 
         if (!gameStarted)
             return;
+
+        RunStats.Tick(Time.deltaTime);
 
         EnsureWaveStatusUI();
         RemoveDefeatedWaveEnemies();
@@ -260,6 +270,7 @@ public class EnemySpawner : MonoBehaviour
     public void StartSpawning()
     {
         gameStarted = true;
+        RunStats.BeginRun();
         ResetWaves();
         if (DrainableSpawner.Instance != null)
             DrainableSpawner.Instance.StartSpawning();

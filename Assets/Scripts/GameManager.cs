@@ -20,8 +20,6 @@ public class GameManager : MonoBehaviour
     public TMP_Text energyText;
     public Image drainGaugeFill;
     public GameObject gameOverPanel;
-    public TMP_Text gameOverScoreText;
-    public TMP_Text bestScoreText;
 
     [Header("Drain UI")]
     [SerializeField] private TMP_Text drainHeatText;
@@ -64,9 +62,15 @@ public class GameManager : MonoBehaviour
     private Vector3 cameraBaseLocalPosition;
     private float baseGaugeIncreasePerSecond;
     private bool overheatNovaEnabled;
+    private GameOverScreen gameOverScreen;
+    private EnemySpawner enemySpawner;
+    private bool reviveUsed;
+    private bool newBestThisRun;
 
     public bool IsOverheated => overheated;
     public bool IsGameOver => isGameOver;
+    // One rewarded-ad revive per run, and only when an ad is ready to play.
+    public bool CanRevive => !reviveUsed && RewardedAds.IsReady;
 
 
     public int maxAmmo = 50;
@@ -91,7 +95,9 @@ public class GameManager : MonoBehaviour
     private void Start()
     {
         bestScore = PlayerPrefs.GetFloat("BestScore", 0f);
-        EnsureGameOverResultsUI();
+        enemySpawner = FindFirstObjectByType<EnemySpawner>();
+        if (gameOverPanel != null)
+            gameOverScreen = GameOverScreen.AttachTo(gameOverPanel);
         EnsureDrainHeatUI();
         EnsureDeathFeedbackUI();
         if (gameOverPanel != null) gameOverPanel.SetActive(false);
@@ -157,55 +163,6 @@ public class GameManager : MonoBehaviour
         deathFlash.color = new Color(1f, 0.25f, 0.35f, 0f);
         deathFlash.raycastTarget = false;
         flashObject.SetActive(false);
-    }
-
-    private void EnsureGameOverResultsUI()
-    {
-        bool hasDistinctResultFields =
-            gameOverScoreText != null &&
-            bestScoreText != null &&
-            gameOverScoreText != scoreText &&
-            bestScoreText != scoreText &&
-            gameOverScoreText != bestScoreText;
-
-        if (hasDistinctResultFields || gameOverPanel == null || scoreText == null)
-            return;
-
-        // The original scene reused ScoreText for every result field. Create
-        // dedicated labels at runtime so the in-game score cannot be overwritten
-        // when the end screen displays the final score and best score.
-        Transform parent = gameOverPanel.transform.childCount > 0
-            ? gameOverPanel.transform.GetChild(0)
-            : gameOverPanel.transform;
-
-        CreateGameOverLabel("GameOverTitle", "GAME OVER", 250f, 52f, new Color(1f, 0.25f, 0.4f));
-        gameOverScoreText = CreateGameOverLabel("FinalScoreText", "Score: 0", 150f, 34f, Color.white);
-        bestScoreText = CreateGameOverLabel("BestScoreText", "Best: 0", 80f, 28f, new Color(0.85f, 0.85f, 0.9f));
-
-        TMP_Text CreateGameOverLabel(string objectName, string initialText, float yPosition, float fontSize, Color color)
-        {
-            TMP_Text label = Instantiate(scoreText, parent, false);
-            label.gameObject.name = objectName;
-            label.text = initialText;
-            label.alignment = TextAlignmentOptions.Center;
-            label.fontSize = fontSize;
-            label.color = color;
-            label.raycastTarget = false;
-            label.margin = Vector4.zero;
-            label.textWrappingMode = TextWrappingModes.NoWrap;
-            label.overflowMode = TextOverflowModes.Overflow;
-
-            RectTransform rect = label.rectTransform;
-            rect.localScale = Vector3.one;
-            rect.localRotation = Quaternion.identity;
-            rect.anchorMin = new Vector2(0.5f, 0.5f);
-            rect.anchorMax = new Vector2(0.5f, 0.5f);
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.anchoredPosition = new Vector2(0f, yPosition);
-            rect.sizeDelta = new Vector2(1200f, 90f);
-
-            return label;
-        }
     }
 
     private void Update()
@@ -432,8 +389,18 @@ public class GameManager : MonoBehaviour
 
     public void GameOver()
     {
+        GameOver(DeathCause.Unknown);
+    }
+
+    public void GameOver(DeathCause cause)
+    {
         if (isGameOver) return;
         isGameOver = true;
+
+        // Read the player's state for the Game Over tip before anything resets it.
+        bool wasDraining = player != null && player.isDraining;
+        PlayerAmmo playerAmmo = player != null ? player.GetComponent<PlayerAmmo>() : null;
+        bool outOfAmmo = playerAmmo != null && !playerAmmo.HasAmmo();
 
         if (KillStreak.Instance != null)
             KillStreak.Instance.ResetStreak();
@@ -450,11 +417,26 @@ public class GameManager : MonoBehaviour
         {
             bestScore = currentScore;
             PlayerPrefs.SetFloat("BestScore", bestScore);
+            newBestThisRun = true;
         }
 
         if (gameOverPanel != null) gameOverPanel.SetActive(true);
-        if (gameOverScoreText != null) gameOverScoreText.text = "Score: " + Mathf.RoundToInt(currentScore);
-        if (bestScoreText != null) bestScoreText.text = "Best: " + Mathf.RoundToInt(bestScore);
+        if (gameOverScreen != null)
+        {
+            gameOverScreen.Show(new GameOverResult
+            {
+                score = Mathf.RoundToInt(currentScore),
+                bestScore = Mathf.RoundToInt(bestScore),
+                // Still the best after a revive, as long as this run holds it.
+                newBest = newBestThisRun && currentScore >= bestScore,
+                wave = enemySpawner != null ? enemySpawner.CurrentWave : 0,
+                kills = RunStats.Kills,
+                bestMultiplier = RunStats.BestMultiplier,
+                seconds = RunStats.Seconds,
+                tip = GameOverScreen.TipFor(cause, outOfAmmo, wasDraining),
+                canRevive = CanRevive
+            });
+        }
 
         Debug.Log("Game Over");
 
@@ -575,6 +557,8 @@ public class GameManager : MonoBehaviour
         StopTransientFeedback();
         ResetCameraPosition();
         isGameOver = false;
+        reviveUsed = false;
+        newBestThisRun = false;
         drainGauge = 0f;
         overheated = false;
         currentEnergy = 0f;
@@ -599,7 +583,6 @@ public class GameManager : MonoBehaviour
     {
         ResetGame();
 
-        EnemySpawner enemySpawner = FindFirstObjectByType<EnemySpawner>();
         if (enemySpawner != null)
             enemySpawner.StartSpawning();
     }
@@ -639,6 +622,7 @@ public class GameManager : MonoBehaviour
         StopTransientFeedback();
         ResetCameraPosition();
         isGameOver = false;
+        reviveUsed = true;
 
         // Come back with a clean slate: no leftover heat, enemies, or shots in flight.
         drainGauge = 0f;
@@ -659,7 +643,6 @@ public class GameManager : MonoBehaviour
         DestroyAllProjectiles();
 
         // GameOver froze the drainables; the wave system decides how the run resumes.
-        EnemySpawner enemySpawner = FindFirstObjectByType<EnemySpawner>();
         if (enemySpawner != null)
             enemySpawner.OnPlayerRevived();
         else if (DrainableSpawner.Instance != null)
@@ -720,9 +703,11 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    // Revive button: plays a rewarded ad first (see GameOverScreen.RequestRevive).
     public void OnClickRevive()
     {
-        RevivePlayer();
+        if (gameOverScreen != null)
+            gameOverScreen.RequestRevive();
     }
 
     public void PauseGame()

@@ -19,6 +19,8 @@ public static class NeonUI
     private static Sprite circle;
     private static Sprite arc;
     private static Sprite dashedRing;
+    private static Sprite edgeVignette;
+    private static Sprite playTriangle;
     private static Texture2D farDots;
     private static Texture2D nearDots;
 
@@ -45,6 +47,14 @@ public static class NeonUI
 
     // Thin dashed circle (like the in-game drain ring).
     public static Sprite DashedRing => dashedRing != null ? dashedRing : (dashedRing = MakeDashedRing(256, 120f, 3.5f, 30));
+
+    // 9-sliced screen-edge glow: strongest at the edges, fading to nothing
+    // EdgeVignetteSpread units inside. Stretch it over the screen (Sliced).
+    public const float EdgeVignetteSpread = 128f;
+    public static Sprite EdgeVignette => edgeVignette != null ? edgeVignette : (edgeVignette = MakeEdgeVignette(EdgeVignetteSpread));
+
+    // Solid right-pointing triangle (a "play" icon).
+    public static Sprite PlayTriangle => playTriangle != null ? playTriangle : (playTriangle = MakePlayTriangle(64));
 
     // Randomly scattered dots on a large repeating tile (1 px = 1 UI unit), for
     // the main screen's two-layer drifting background. Dots wrap across the
@@ -216,6 +226,57 @@ public static class NeonUI
         }
 
         return Finish(texture, pixels, Vector4.zero);
+    }
+
+    private static Sprite MakeEdgeVignette(float spread)
+    {
+        // Two spreads plus a 2 px transparent middle that the 9-slice stretches.
+        int size = Mathf.CeilToInt(spread) * 2 + 2;
+        Texture2D texture = NewTexture(size, size, "NeonEdgeVignette");
+        Color32[] pixels = new Color32[size * size];
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float fromEdge = Mathf.Min(Mathf.Min(x + 0.5f, size - x - 0.5f), Mathf.Min(y + 0.5f, size - y - 0.5f));
+                // Reaches exactly zero before the middle (see MakeOuterGlow).
+                float alpha = Mathf.Pow(Mathf.Clamp01(1f - fromEdge / spread), 4f);
+                pixels[y * size + x] = White(alpha);
+            }
+        }
+
+        return Finish(texture, pixels, new Vector4(spread, spread, spread, spread));
+    }
+
+    private static Sprite MakePlayTriangle(int size)
+    {
+        Texture2D texture = NewTexture(size, size, "NeonPlayTriangle");
+        Color32[] pixels = new Color32[size * size];
+        Vector2 a = new Vector2(size * 0.12f, size * 0.06f);
+        Vector2 b = new Vector2(size * 0.12f, size * 0.94f);
+        Vector2 c = new Vector2(size * 0.94f, size * 0.5f);
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                Vector2 p = new Vector2(x + 0.5f, y + 0.5f);
+                // Signed distance to the triangle's edges (positive inside), for anti-aliasing.
+                float inside = Mathf.Min(EdgeSide(a, b, p), Mathf.Min(EdgeSide(b, c, p), EdgeSide(c, a, p)));
+                pixels[y * size + x] = White(Mathf.Clamp01(inside + 0.5f));
+            }
+        }
+
+        return Finish(texture, pixels, Vector4.zero);
+    }
+
+    // Distance from p to the line through from -> to; positive on the right-hand side.
+    private static float EdgeSide(Vector2 from, Vector2 to, Vector2 p)
+    {
+        Vector2 edge = (to - from).normalized;
+        Vector2 offset = p - from;
+        return edge.y * offset.x - edge.x * offset.y;
     }
 
     private static Texture2D MakeScatterTile(string name, int count, float minRadius, float maxRadius, float minAlpha, float maxAlpha, int seed)
