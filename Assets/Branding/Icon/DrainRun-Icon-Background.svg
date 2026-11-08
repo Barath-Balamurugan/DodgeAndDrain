@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="432" height="432" viewBox="0 0 108 108">
+  <title>Drain Run adaptive icon background</title>
+  <defs>
+    <radialGradient id="glow" cx="54" cy="54" r="30" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FF4C76" stop-opacity=".65"/>
+      <stop offset="1" stop-color="#FF4C76" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="108" height="108" fill="#0E0E10"/>
+</svg>
