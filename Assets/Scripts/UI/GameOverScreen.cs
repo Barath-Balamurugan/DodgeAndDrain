@@ -63,6 +63,7 @@ public class GameOverScreen : MonoBehaviour
     private GameOverResult result;
     private float time;
     private bool reviving;
+    private float reviveCheckTimer;
 
     private RectTransform layout;
     private CanvasGroup layoutGroup;
@@ -113,6 +114,26 @@ public class GameOverScreen : MonoBehaviour
     {
         time += Time.unscaledDeltaTime;
         Animate();
+        OfferReviveOnceAdLoads();
+    }
+
+    // An ad can finish loading after death; offer Revive as soon as it does.
+    private void OfferReviveOnceAdLoads()
+    {
+        if (result.canRevive || reviving)
+            return;
+
+        reviveCheckTimer -= Time.unscaledDeltaTime;
+        if (reviveCheckTimer > 0f)
+            return;
+        reviveCheckTimer = 0.5f;
+
+        GameManager gameManager = GameManager.Instance;
+        if (gameManager != null && gameManager.IsGameOver && gameManager.CanRevive)
+        {
+            result.canRevive = true;
+            LayoutButtons();
+        }
     }
 
     // Fills the screen in for this death and replays its entrance.

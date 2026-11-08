@@ -6,8 +6,8 @@ using UnityEditor.Build.Reporting;
 // Builds a debug-signed APK for installing straight onto a test phone over USB
 // (adb install), without needing the upload keystore's password.
 // Store builds still go through AndroidReleaseBuilder and stay keystore-signed.
-// Device builds also play a placeholder in place of rewarded ads and show test
-// controls on the main screen (store builds don't).
+// Device builds also show test controls and, until Drain Run's own ad IDs are
+// set, use LevelPlay's demo ads (store builds don't).
 //
 // Command line:
 //   Unity -batchmode -quit -projectPath . -buildTarget Android \
@@ -29,6 +29,7 @@ public static class AndroidDeviceBuilder
             EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android, BuildTarget.Android);
             EditorUserBuildSettings.buildAppBundle = false;
             PlayerSettings.Android.useCustomKeystore = false;
+            ResolveAndroidDependencies();
 
             BuildReport report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
             {
@@ -37,10 +38,12 @@ public static class AndroidDeviceBuilder
                 target = BuildTarget.Android,
                 targetGroup = BuildTargetGroup.Android,
                 options = BuildOptions.None,
-                // Test builds only: a placeholder stands in for rewarded ads so
-                // Revive can be tried before an ad SDK is added (see RewardedAds),
-                // plus the test controls and pacing log (see TestBuild).
-                extraScriptingDefines = new[] { "DRAINRUN_TEST_ADS", "DRAINRUN_TEST_BUILD" }
+                // Test builds only: test controls, pacing log and LevelPlay's
+                // demo ads until Drain Run's own ad IDs are set (see TestBuild,
+                // AdsConfig). -storeLike builds without them (store screenshots).
+                extraScriptingDefines = HasArg("-storeLike")
+                    ? new string[0]
+                    : new[] { "DRAINRUN_TEST_BUILD" }
             });
 
             if (report.summary.result != BuildResult.Succeeded)
@@ -50,9 +53,32 @@ public static class AndroidDeviceBuilder
         }
         finally
         {
-            // Put the release signing setup back exactly as it was.
+            // Put the release signing setup back exactly as it was, and save it
+            // so a failed build can't leave it changed on disk.
             EditorUserBuildSettings.buildAppBundle = previousAppBundle;
             PlayerSettings.Android.useCustomKeystore = previousCustomKeystore;
+            AssetDatabase.SaveAssets();
         }
+    }
+
+    // Runs the External Dependency Manager's Android resolver (LevelPlay's SDK
+    // and adapters are Maven libraries listed in Assets/LevelPlay/Editor), which
+    // adds them to mainTemplate.gradle. In batch mode it doesn't run by itself.
+    private static void ResolveAndroidDependencies()
+    {
+        Type resolver = Type.GetType("GooglePlayServices.PlayServicesResolver, Google.JarResolver");
+        if (resolver == null)
+        {
+            UnityEngine.Debug.LogWarning("Android resolver not found; skipping dependency resolution.");
+            return;
+        }
+
+        object resolved = resolver.GetMethod("ResolveSync", new[] { typeof(bool) })?.Invoke(null, new object[] { true });
+        UnityEngine.Debug.Log($"Android dependency resolution finished: {resolved}");
+    }
+
+    private static bool HasArg(string name)
+    {
+        return Array.IndexOf(Environment.GetCommandLineArgs(), name) >= 0;
     }
 }

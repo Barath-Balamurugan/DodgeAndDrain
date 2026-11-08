@@ -6,6 +6,7 @@ using UnityEngine;
 public static class TestBuild
 {
     private const string ForceRareCardsKey = "Debug.ForceRareCards";
+    private const string ForceEuRegionKey = "Debug.ForceEuRegion";
 
     public static bool Enabled
     {
@@ -29,6 +30,19 @@ public static class TestBuild
             if (!Enabled)
                 return;
             PlayerPrefs.SetInt(ForceRareCardsKey, value ? 1 : 0);
+            PlayerPrefs.Save();
+        }
+    }
+
+    // Treat this phone as being in the EU/UK, to try the ad consent card.
+    public static bool ForceEuRegion
+    {
+        get => Enabled && PlayerPrefs.GetInt(ForceEuRegionKey, 0) == 1;
+        set
+        {
+            if (!Enabled)
+                return;
+            PlayerPrefs.SetInt(ForceEuRegionKey, value ? 1 : 0);
             PlayerPrefs.Save();
         }
     }

@@ -60,6 +60,10 @@ public class MainScreen : MonoBehaviour
     private TMP_Text vibrationLabel;
     private Image vibrationEdge;
     private TMP_Text rareCardsLabel;
+    private TMP_Text euConsentLabel;
+    private RectTransform adPrivacyButton;
+    private Canvas rootCanvas;
+    private TMP_Text uiTextSource;
     private TMP_Text firstRunLabel;
     private float firstRunConfirmTimer;
 
@@ -77,6 +81,8 @@ public class MainScreen : MonoBehaviour
         entranceTime = 0f;
         RefreshBest(-1f, -1);
         RefreshToggles();
+        RefreshAdPrivacy();
+        AskForAdConsentIfNeeded();
     }
 
     private void OnDisable()
@@ -110,6 +116,12 @@ public class MainScreen : MonoBehaviour
         time = atTime;
         entranceTime = EntranceDuration;
         Animate();
+    }
+
+    // Editor preview of the ad consent card over the main screen.
+    public void ShowAdConsentForPreview()
+    {
+        AdConsentCard.Show(rootCanvas, uiTextSource, true, null, true);
     }
 
     // ---------- Build ----------
@@ -158,6 +170,11 @@ public class MainScreen : MonoBehaviour
         BuildTips(layout, textSource);
         if (TestBuild.Enabled)
             BuildTestControls(layout, textSource);
+
+        rootCanvas = root;
+        uiTextSource = textSource;
+        RefreshAdPrivacy();
+        AskForAdConsentIfNeeded();
 
         layout.gameObject.SetActive(isActiveAndEnabled);
         RefreshBest(-1f, -1);
@@ -263,6 +280,12 @@ public class MainScreen : MonoBehaviour
             RefreshToggles();
         });
 
+        // EU/UK only: reopens the ad consent card.
+        Button adPrivacy = AddOutlineButton(parent, textSource, "AdPrivacy", "AD PRIVACY", new Vector2(1f, 1f),
+            new Vector2(-695f, -64f), new Vector2(260f, 58f), out _, out _);
+        adPrivacyButton = (RectTransform)adPrivacy.transform;
+        adPrivacy.onClick.AddListener(() => AdConsentCard.Show(rootCanvas, uiTextSource, false));
+
         Button sound = AddOutlineButton(parent, textSource, "SoundToggle", string.Empty, new Vector2(1f, 1f),
             new Vector2(-440f, -64f), new Vector2(210f, 58f), out soundLabel, out soundEdge);
         sound.onClick.AddListener(() =>
@@ -312,7 +335,35 @@ public class MainScreen : MonoBehaviour
             RefreshTestControls();
         });
 
+        Button euConsent = AddOutlineButton(parent, textSource, "TestEuConsent", string.Empty, new Vector2(1f, 0f),
+            new Vector2(-215f, 108f), new Vector2(310f, 50f), out euConsentLabel, out Image euEdge);
+        euEdge.color = WithAlpha(amber, 0.55f);
+        euConsentLabel.fontSize = 17f;
+        euConsentLabel.color = amber;
+        euConsent.onClick.AddListener(() =>
+        {
+            TestBuild.ForceEuRegion = !TestBuild.ForceEuRegion;
+            if (TestBuild.ForceEuRegion)
+                AdsConsent.ClearForTesting();
+            RefreshTestControls();
+            RefreshAdPrivacy();
+            AskForAdConsentIfNeeded();
+        });
+
         RefreshTestControls();
+    }
+
+    // Before the first play in the EU/UK: ask about ads (once).
+    private void AskForAdConsentIfNeeded()
+    {
+        if (AdsConsent.NeedsAnswer && !AdConsentCard.IsOpen && rootCanvas != null)
+            AdConsentCard.Show(rootCanvas, uiTextSource, true);
+    }
+
+    private void RefreshAdPrivacy()
+    {
+        if (adPrivacyButton != null)
+            adPrivacyButton.gameObject.SetActive(AdsConsent.InRegulatedRegion);
     }
 
     private void RefreshTestControls()
@@ -321,6 +372,8 @@ public class MainScreen : MonoBehaviour
             rareCardsLabel.text = TestBuild.ForceRareCards ? "TEST  RARES FORCED" : "TEST  RARES NORMAL";
         if (firstRunLabel != null)
             firstRunLabel.text = firstRunConfirmTimer > 0f ? "TEST  FIRST RUN SET" : "TEST  RESET FIRST RUN";
+        if (euConsentLabel != null)
+            euConsentLabel.text = TestBuild.ForceEuRegion ? "TEST  EU CONSENT ON" : "TEST  EU CONSENT OFF";
     }
 
     // ---------- State ----------

@@ -117,6 +117,22 @@ public static class MainScreenPreview
         });
     }
 
+    // Ad consent card over the main screen:
+    //   -executeMethod MainScreenPreview.RenderConsent -previewOut out.png
+    public static void RenderConsent()
+    {
+        string outPath = GetArg("-previewOut") ?? "Temp/ConsentPreview.png";
+        RenderScene(outPath, 1560, 720, () =>
+        {
+            MainScreen mainScreen = Object.FindFirstObjectByType<MainScreen>(FindObjectsInactive.Include);
+            if (mainScreen == null)
+                return false;
+            mainScreen.BuildForPreview(964f, 7, 1.3f);
+            mainScreen.ShowAdConsentForPreview();
+            return true;
+        });
+    }
+
     private static string RenderToFile(string outPath, int width, int height)
     {
         return RenderScene(outPath, width, height, () =>

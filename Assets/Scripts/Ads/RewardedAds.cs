@@ -1,36 +1,33 @@
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using TMPro;
+using Unity.Services.LevelPlay;
 using UnityEngine;
 using UnityEngine.UI;
 
-// Rewarded video ads ("watch an ad, get a revive"), kept behind this small
-// interface so the Game Over screen doesn't depend on any ad SDK.
-//
-// No ad SDK is installed yet:
-// - the editor and test builds (AndroidDeviceBuilder adds DRAINRUN_TEST_ADS)
-//   play a short placeholder instead of an ad and then grant the reward, so the
-//   revive flow can be tried end to end
-// - every other build (store builds) reports no ad available, so Revive stays
-//   hidden and players never see a fake ad
-//
-// To add a real SDK (AdMob, LevelPlay, ...): initialise it and load a rewarded
-// ad at startup, return the SDK's "ad loaded" state from IsReady, and in Show
-// call onFinished(true) from the SDK's reward callback (or false if the ad
-// failed or was closed early) on the main thread, then load the next ad.
+// Rewarded video ads ("watch an ad, get a revive") through Unity LevelPlay,
+// kept behind this small interface so the Game Over screen doesn't depend on
+// the SDK.
+// - On phones: LevelPlay. Drain Run's IDs come from AdsConfig; until they are
+//   filled in, store builds have no ads (Revive stays hidden) and test builds
+//   use LevelPlay's demo app.
+// - In the editor: a 2-second placeholder (LevelPlay doesn't run there).
+// - Consent: in the EU/EEA, UK and Switzerland the SDK only starts once the
+//   player has answered (AdsConsent).
 public static class RewardedAds
 {
     private const float PlaceholderSeconds = 2f;
 
     public static bool IsShowing { get; private set; }
 
-    public static bool IsReady => UsesPlaceholder && !IsShowing;
+    public static bool IsReady => !IsShowing && (UsesPlaceholder || LevelPlayRewardedRunner.IsAdLoaded);
 
     private static bool UsesPlaceholder
     {
         get
         {
-#if UNITY_EDITOR || DRAINRUN_TEST_ADS
+#if UNITY_EDITOR
             return true;
 #else
             return false;
@@ -38,7 +35,30 @@ public static class RewardedAds
         }
     }
 
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    private static void StartOnLaunch()
+    {
+        StartIfAllowed();
+    }
+
+    // Called by AdsConsent when the player answers.
+    public static void OnConsentChanged()
+    {
+        LevelPlayRewardedRunner.ApplyConsent();
+        StartIfAllowed();
+    }
+
+    private static void StartIfAllowed()
+    {
+        if (UsesPlaceholder || !AdsConsent.IsSettled)
+            return;
+
+        if (AdsConfig.TryGetIds(out string appKey, out string adUnitId))
+            LevelPlayRewardedRunner.Start(appKey, adUnitId);
+    }
+
     // Shows an ad; onFinished(true) means the player earned the reward.
+    // Always called back on the main thread.
     public static void Show(Action<bool> onFinished)
     {
         if (!IsReady)
@@ -48,16 +68,170 @@ public static class RewardedAds
         }
 
         IsShowing = true;
-        PlaceholderAd.Play(PlaceholderSeconds, () =>
+        void Finish(bool rewarded)
         {
             IsShowing = false;
-            onFinished?.Invoke(true);
-        });
+            onFinished?.Invoke(rewarded);
+        }
+
+        if (UsesPlaceholder)
+            PlaceholderAd.Play(PlaceholderSeconds, () => Finish(true));
+        else
+            LevelPlayRewardedRunner.Show(Finish);
     }
 }
 
-// Full-screen stand-in for a rewarded video in test builds: a labelled black
-// screen with a short countdown. Never used in store builds.
+// Owns the LevelPlay SDK and the one rewarded ad: starts the SDK, keeps an ad
+// loaded (retrying with a growing delay when there's no fill), shows it, and
+// reports whether it was rewarded. SDK callbacks are moved onto the main thread.
+internal sealed class LevelPlayRewardedRunner : MonoBehaviour
+{
+    private const float FirstRetryDelay = 4f;
+    private const float MaxRetryDelay = 64f;
+    // Some networks report the reward just after the ad closes.
+    private const float LateRewardGrace = 1f;
+
+    private static LevelPlayRewardedRunner instance;
+
+    private readonly ConcurrentQueue<Action> mainThread = new ConcurrentQueue<Action>();
+    private string adUnitId;
+    private LevelPlayRewardedAd rewardedAd;
+    private float retryDelay = FirstRetryDelay;
+    private Action<bool> pendingShow;
+    private bool rewarded;
+    private bool closed;
+
+    public static bool IsAdLoaded => instance != null && instance.rewardedAd != null && instance.rewardedAd.IsAdReady();
+
+    public static void Start(string appKey, string rewardedAdUnitId)
+    {
+        if (instance != null)
+            return;
+
+        GameObject runner = new GameObject("LevelPlayRewardedAds");
+        DontDestroyOnLoad(runner);
+        instance = runner.AddComponent<LevelPlayRewardedRunner>();
+        instance.adUnitId = rewardedAdUnitId;
+
+        ApplyConsent();
+        // Pause the game while an ad is on screen; it resumes when the ad closes.
+        LevelPlay.SetPauseGame(true);
+        if (TestBuild.Enabled)
+            LevelPlay.SetAdaptersDebug(true);
+
+        LevelPlay.OnInitSuccess += instance.OnInitSuccess;
+        LevelPlay.OnInitFailed += instance.OnInitFailed;
+        LevelPlay.Init(appKey);
+    }
+
+    // Passes the player's answer to LevelPlay (only asked in regulated regions).
+    public static void ApplyConsent()
+    {
+        if (AdsConsent.InRegulatedRegion && AdsConsent.HasAnswered)
+            LevelPlayPrivacySettings.SetGDPRConsent(AdsConsent.Granted);
+    }
+
+    public static void Show(Action<bool> onFinished)
+    {
+        if (!IsAdLoaded)
+        {
+            onFinished?.Invoke(false);
+            return;
+        }
+
+        instance.pendingShow = onFinished;
+        instance.rewarded = false;
+        instance.closed = false;
+        instance.rewardedAd.ShowAd();
+    }
+
+    private void Update()
+    {
+        while (mainThread.TryDequeue(out Action action))
+            action();
+    }
+
+    private void Post(Action action) => mainThread.Enqueue(action);
+
+    private void OnInitSuccess(LevelPlayConfiguration configuration) => Post(() =>
+    {
+        TestBuild.Log("LevelPlay ready");
+        if (TestBuild.Enabled)
+            LevelPlay.ValidateIntegration();
+
+        rewardedAd = new LevelPlayRewardedAd(adUnitId);
+        rewardedAd.OnAdLoaded += info => Post(() =>
+        {
+            retryDelay = FirstRetryDelay;
+            TestBuild.Log("rewarded ad loaded");
+        });
+        rewardedAd.OnAdLoadFailed += error => Post(() =>
+        {
+            TestBuild.Log($"rewarded ad load failed: {error}; retrying in {retryDelay:F0}s");
+            StartCoroutine(LoadAfter(retryDelay));
+            retryDelay = Mathf.Min(retryDelay * 2f, MaxRetryDelay);
+        });
+        rewardedAd.OnAdRewarded += (info, reward) => Post(() =>
+        {
+            rewarded = true;
+            if (closed)
+                FinishShow();
+        });
+        rewardedAd.OnAdClosed += info => Post(() =>
+        {
+            closed = true;
+            if (rewarded)
+                FinishShow();
+            else
+                StartCoroutine(FinishAfterGrace());
+        });
+        rewardedAd.OnAdDisplayFailed += (info, error) => Post(() =>
+        {
+            TestBuild.Log($"rewarded ad failed to show: {error}");
+            rewarded = false;
+            FinishShow();
+        });
+        rewardedAd.LoadAd();
+    });
+
+    private void OnInitFailed(LevelPlayInitError error) => Post(() =>
+    {
+        TestBuild.Log($"LevelPlay init failed: {error}");
+    });
+
+    private IEnumerator LoadAfter(float seconds)
+    {
+        yield return new WaitForSecondsRealtime(seconds);
+        if (rewardedAd != null && !rewardedAd.IsAdReady())
+            rewardedAd.LoadAd();
+    }
+
+    private IEnumerator FinishAfterGrace()
+    {
+        float waited = 0f;
+        while (!rewarded && waited < LateRewardGrace)
+        {
+            waited += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        FinishShow();
+    }
+
+    // Reports the result once, then loads the next ad.
+    private void FinishShow()
+    {
+        Action<bool> callback = pendingShow;
+        pendingShow = null;
+        if (callback == null)
+            return;
+
+        callback(rewarded);
+        rewardedAd.LoadAd();
+    }
+}
+
+// Full-screen stand-in for a rewarded video in the editor: a labelled black
+// screen with a short countdown. Never used on phones.
 public class PlaceholderAd : MonoBehaviour
 {
     private float duration;
@@ -91,8 +265,8 @@ public class PlaceholderAd : MonoBehaviour
         backdrop.color = Color.black;
 
         TMP_FontAsset font = FindGameFont();
-        AddText(font, "TEST AD", 64f, new Color(0.955f, 0.955f, 0.955f), new Vector2(0f, 90f));
-        AddText(font, "A REAL REWARDED VIDEO WILL PLAY HERE ONCE ADS ARE SET UP", 22f, new Color(0.6f, 0.6f, 0.6f), new Vector2(0f, 10f));
+        AddText(font, "EDITOR AD", 64f, new Color(0.955f, 0.955f, 0.955f), new Vector2(0f, 90f));
+        AddText(font, "ON A PHONE, A LEVELPLAY REWARDED VIDEO PLAYS HERE", 22f, new Color(0.6f, 0.6f, 0.6f), new Vector2(0f, 10f));
         countdown = AddText(font, string.Empty, 26f, new Color(0.28f, 0.96f, 1f), new Vector2(0f, -70f));
 
         RectTransform track = AddRect("Progress", new Vector2(0f, -130f), new Vector2(520f, 6f));
