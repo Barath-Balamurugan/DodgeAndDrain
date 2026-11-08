@@ -59,6 +59,9 @@ public class MainScreen : MonoBehaviour
     private Image soundEdge;
     private TMP_Text vibrationLabel;
     private Image vibrationEdge;
+    private TMP_Text rareCardsLabel;
+    private TMP_Text firstRunLabel;
+    private float firstRunConfirmTimer;
 
     private void Awake()
     {
@@ -87,6 +90,12 @@ public class MainScreen : MonoBehaviour
         float deltaTime = Time.unscaledDeltaTime;
         time += deltaTime;
         entranceTime += deltaTime;
+        if (firstRunConfirmTimer > 0f)
+        {
+            firstRunConfirmTimer -= deltaTime;
+            if (firstRunConfirmTimer <= 0f)
+                RefreshTestControls();
+        }
         Animate();
     }
 
@@ -147,6 +156,8 @@ public class MainScreen : MonoBehaviour
         BuildHowToPlay(layout, textSource);
         BuildToggles(layout, textSource);
         BuildTips(layout, textSource);
+        if (TestBuild.Enabled)
+            BuildTestControls(layout, textSource);
 
         layout.gameObject.SetActive(isActiveAndEnabled);
         RefreshBest(-1f, -1);
@@ -270,6 +281,46 @@ public class MainScreen : MonoBehaviour
         // Fade the whole line (the coloured "TIP" tag ignores the text's own alpha).
         tipGroup = tipText.gameObject.AddComponent<CanvasGroup>();
         ShowTip(0);
+    }
+
+    // Test builds only (never in store builds): amber pills in the bottom-right
+    // corner to force the rare power-up cards and to replay the first launch.
+    private void BuildTestControls(RectTransform parent, TMP_Text textSource)
+    {
+        Color amber = new Color(1f, 0.7f, 0.28f);
+
+        Button rares = AddOutlineButton(parent, textSource, "TestRareCards", string.Empty, new Vector2(1f, 0f),
+            new Vector2(-215f, 48f), new Vector2(310f, 50f), out rareCardsLabel, out Image rareEdge);
+        rareEdge.color = WithAlpha(amber, 0.55f);
+        rareCardsLabel.fontSize = 17f;
+        rareCardsLabel.color = amber;
+        rares.onClick.AddListener(() =>
+        {
+            TestBuild.ForceRareCards = !TestBuild.ForceRareCards;
+            RefreshTestControls();
+        });
+
+        Button firstRun = AddOutlineButton(parent, textSource, "TestFirstRun", string.Empty, new Vector2(1f, 0f),
+            new Vector2(-545f, 48f), new Vector2(310f, 50f), out firstRunLabel, out Image firstRunEdge);
+        firstRunEdge.color = WithAlpha(amber, 0.55f);
+        firstRunLabel.fontSize = 17f;
+        firstRunLabel.color = amber;
+        firstRun.onClick.AddListener(() =>
+        {
+            InitialRun.ResetFirstRun();
+            firstRunConfirmTimer = 1.6f;
+            RefreshTestControls();
+        });
+
+        RefreshTestControls();
+    }
+
+    private void RefreshTestControls()
+    {
+        if (rareCardsLabel != null)
+            rareCardsLabel.text = TestBuild.ForceRareCards ? "TEST  RARES FORCED" : "TEST  RARES NORMAL";
+        if (firstRunLabel != null)
+            firstRunLabel.text = firstRunConfirmTimer > 0f ? "TEST  FIRST RUN SET" : "TEST  RESET FIRST RUN";
     }
 
     // ---------- State ----------

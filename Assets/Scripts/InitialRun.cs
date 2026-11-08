@@ -62,6 +62,13 @@ public class InitialRun : MonoBehaviour
             screen.SetBackVisible(visible);
     }
 
+    // Test builds: make the next PLAY behave like a first launch (tutorial, no BACK).
+    public static void ResetFirstRun()
+    {
+        PlayerPrefs.DeleteKey(FirstRunKey);
+        PlayerPrefs.Save();
+    }
+
     public void CloseTutorial()
     {
         tutorialPanel.SetActive(false);

@@ -150,6 +150,13 @@ public class EnemySpawner : MonoBehaviour
     private readonly List<EnemyBase> spawnQueue = new List<EnemyBase>();
     private readonly HashSet<EnemyBase> activeWaveEnemies = new HashSet<EnemyBase>();
 
+    // Test-build pacing log (see TestBuild.Log).
+    private int waveEnemyTotal;
+    private float waveElapsed;
+    private float waveFirstOnScreen;
+    private int wavePeakOnScreen;
+    private bool deathLogged;
+
     private WaveState waveState = WaveState.Idle;
     private bool gameStarted;
     private int waveNumber;
@@ -196,8 +203,17 @@ public class EnemySpawner : MonoBehaviour
         {
             if (waveStatusText != null && waveStatusText.text.Length > 0)
                 waveStatusText.text = string.Empty;
+            if (gameStarted && !deathLogged)
+            {
+                deathLogged = true;
+                TestBuild.Log($"died in wave {waveNumber} ({waveState}) after {waveElapsed:F1}s: " +
+                    $"{activeWaveEnemies.Count} alive, {CountOnScreen()} on screen, {spawnQueue.Count} still to spawn, " +
+                    $"run {RunStats.Seconds:F0}s, {RunStats.Kills} kills");
+            }
             return;
         }
+
+        deathLogged = false;
 
         if (!gameStarted)
             return;
@@ -233,6 +249,7 @@ public class EnemySpawner : MonoBehaviour
                 break;
 
             case WaveState.Spawning:
+                TrackWavePacing();
                 SpawnWaveEnemies();
                 if (spawnQueue.Count == 0 && activeWaveEnemies.Count == 0)
                     CompleteWave();
@@ -347,6 +364,10 @@ public class EnemySpawner : MonoBehaviour
         waveNumber++;
         GameSettings.RecordWaveReached(waveNumber);
         BuildWaveQueue(waveNumber);
+        waveEnemyTotal = spawnQueue.Count;
+        waveElapsed = 0f;
+        waveFirstOnScreen = -1f;
+        wavePeakOnScreen = 0;
         waveState = WaveState.WaveIntro;
         waveIntroTimer = waveTitleCenterHoldDuration + waveTitleMoveDuration;
 
@@ -490,6 +511,29 @@ public class EnemySpawner : MonoBehaviour
         return Mathf.Max(minimumSpawnDistance, firstWaveSpawnDistance - distanceReduction);
     }
 
+    private void TrackWavePacing()
+    {
+        if (!TestBuild.Enabled)
+            return;
+
+        waveElapsed += Time.deltaTime;
+        int onScreen = CountOnScreen();
+        if (onScreen > 0 && waveFirstOnScreen < 0f)
+            waveFirstOnScreen = waveElapsed;
+        wavePeakOnScreen = Mathf.Max(wavePeakOnScreen, onScreen);
+    }
+
+    private int CountOnScreen()
+    {
+        int count = 0;
+        foreach (EnemyBase enemy in activeWaveEnemies)
+        {
+            if (enemy != null && CameraFollow.IsInView(enemy.transform.position))
+                count++;
+        }
+        return count;
+    }
+
     private void RemoveDefeatedWaveEnemies()
     {
         activeWaveEnemies.RemoveWhere(enemy => enemy == null);
@@ -497,6 +541,9 @@ public class EnemySpawner : MonoBehaviour
 
     private void CompleteWave()
     {
+        TestBuild.Log($"wave {waveNumber} cleared: {waveEnemyTotal} enemies in {waveElapsed:F1}s, " +
+            $"first on screen after {waveFirstOnScreen:F1}s, peak {wavePeakOnScreen} on screen");
+
         if (GameFeedback.Instance != null)
             GameFeedback.Instance.PlayWaveClear();
 
@@ -852,6 +899,7 @@ public class EnemySpawner : MonoBehaviour
     // Light up the chosen card, dim the others, then apply it after a beat.
     private void OnPowerUpCardTapped(int cardIndex, PowerUp powerUp)
     {
+        TestBuild.Log($"wave {waveNumber} power-up: {powerUp}");
         if (powerUpChoiceLocked || !powerUpCardsVisible || waveState != WaveState.PowerUpSelection)
             return;
 
@@ -920,6 +968,15 @@ public class EnemySpawner : MonoBehaviour
         {
             if (!ownedRarePowerUps.Contains(rare))
                 availableRares.Add(rare);
+        }
+
+        // Test builds: offer every rare not owned yet, from wave 1.
+        if (TestBuild.ForceRareCards && availableRares.Count > 0)
+        {
+            Shuffle(availableRares);
+            for (int i = 0; i < availableRares.Count && i < choices.Count; i++)
+                choices[i] = availableRares[i];
+            return choices;
         }
 
         bool offerRare = availableRares.Count > 0 &&

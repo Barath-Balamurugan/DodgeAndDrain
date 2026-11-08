@@ -25,7 +25,6 @@ public class EnemyDasher : EnemyBase
 
     private SpriteRenderer sr;  
     private Color originalColor;
-    private bool isFlashing;
     private LineRenderer windupRing;
     private LineRenderer windupLine;
 
@@ -81,7 +80,6 @@ public class EnemyDasher : EnemyBase
     {
         dashOnCooldown = true;
 
-        isFlashing = true;
         SetWindupTelegraphVisible(true);
 
         float t = 0f;
@@ -101,7 +99,6 @@ public class EnemyDasher : EnemyBase
 
         // Lock direction AFTER windup
         dashDir = lockedDir;
-        isFlashing = false;
 
         if (sr != null)
             sr.color = originalColor;
