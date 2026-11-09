@@ -9,7 +9,7 @@ public static class AdsConfig
 
     // Linked from the ad consent card when set (Google Play also requires a
     // privacy policy for apps with ads).
-    public const string PrivacyPolicyUrl = "";
+    public const string PrivacyPolicyUrl = "https://sites.google.com/view/drain-run-privacy-policy/home";
 
     // LevelPlay's public demo app (from the LevelPlay Unity sample). It serves
     // test ads, for trying the integration before Drain Run's IDs exist.
